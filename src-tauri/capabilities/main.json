@@ -1,0 +1,11 @@
+{
+  "identifier": "main",
+  "description": "Core capabilities for Rocktier Sign",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    "opener:default"
+  ]
+}
