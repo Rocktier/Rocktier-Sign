@@ -51,12 +51,14 @@ export default function VerifyPage({ lang }: Props) {
   return (
     <div className="page">
       <h2 className="page-title">{t("verify.heading", lang)}</h2>
+      <p className="page-intro">{t("verify.intro", lang)}</p>
       <div className="page-body">
         <div className="form-row">
           <label>{t("verify.selectPdf", lang)}</label>
           <button className="btn-secondary" onClick={pickPdf}>
             {pdfPath ? pdfPath.split(/[\\/]/).pop() : t("common.browse", lang)}
           </button>
+          <p className="form-helper">{t("verify.selectPdf.help", lang)}</p>
         </div>
 
         <button

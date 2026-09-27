@@ -71,23 +71,26 @@ export function CopyIcon({ size = 14, className }: IconProps) {
   );
 }
 
-/** Rocktier SG monogram badge (for sidebar brand). */
+/**
+ * Rocktier family badge — full brand mark.
+ * Mirrors icon-family.svg: dark rounded-square + checkmark badge + red dot + "SG" monogram.
+ * Use for sidebar brand, About hero, anywhere the family mark is needed.
+ */
 export function SignBadge({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
-      <rect x="4" y="4" width="56" height="56" rx="14" fill="var(--accent)" />
-      <text
-        x="32"
-        y="36"
-        textAnchor="middle"
-        fontFamily="var(--font)"
-        fontWeight="650"
-        fontSize="22"
-        fill="var(--accent-text)"
-      >
-        SG
-      </text>
-      <circle cx="52" cy="14" r="5" fill="var(--red)" />
+    <svg width={size} height={size} viewBox="0 0 1024 1024" fill="none">
+      {/* Rounded-square background */}
+      <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="#0A0A0A" />
+      <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="none" stroke="#333333" strokeWidth="6" />
+      {/* Top-left: checkmark in circle (brand badge) */}
+      <g transform="translate(128,128) scale(0.85)">
+        <circle cx="180" cy="180" r="160" fill="none" stroke="#FFFFFF" strokeWidth="24" strokeLinecap="round" />
+        <polyline points="120,185 165,230 245,130" fill="none" stroke="#FFFFFF" strokeWidth="28" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+      {/* Red dot */}
+      <circle cx="860" cy="164" r="36" fill="#FF4A3D" />
+      {/* Product monogram */}
+      <text x="512" y="640" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" fontWeight="650" fontSize="360" fill="#FFFFFF" textAnchor="middle" dominantBaseline="central" letterSpacing="-20">SG</text>
     </svg>
   );
 }

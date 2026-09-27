@@ -81,6 +81,7 @@ export default function SignPage({ lang }: Props) {
   return (
     <div className="page">
       <h2 className="page-title">{t("sign.heading", lang)}</h2>
+      <p className="page-intro">{t("sign.intro", lang)}</p>
       <div className="page-body">
         <div className="form-row">
           <label>{t("sign.selectPdf", lang)}</label>
@@ -102,6 +103,7 @@ export default function SignPage({ lang }: Props) {
               <option key={c.name} value={c.name}>{c.name}</option>
             ))}
           </select>
+          <p className="form-helper">{t("chooseCert.help", lang)}</p>
         </div>
 
         <div className="form-row">
@@ -113,6 +115,7 @@ export default function SignPage({ lang }: Props) {
             placeholder={certId ?? ""}
             onChange={(e) => setSignerName(e.target.value)}
           />
+          <p className="form-helper">{t("nameLabel.help", lang)}</p>
         </div>
 
         <div className="form-row">

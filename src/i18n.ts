@@ -19,9 +19,16 @@ export const translations: Dict = {
 
   // Sign page
   "sign.heading": { en: "Sign a PDF", zh: "签名 PDF" },
+  "sign.intro": {
+    en: "Select a PDF file, choose your certificate, and apply a digital signature. The signed copy is saved next to the original. No data ever leaves your device.",
+    zh: "选择 PDF 文件、选定证书，即可添加数字签名。签名后的副本保存在原文件旁。所有数据不会离开你的设备。",
+  },
   "sign.selectPdf": { en: "Select PDF file", zh: "选择 PDF 文件" },
+  "selectPdf.help": { en: "Choose the PDF you want to digitally sign.", zh: "选择要添加数字签名的 PDF 文件。" },
   "sign.chooseCert": { en: "Choose certificate", zh: "选择证书" },
+  "chooseCert.help": { en: "Pick the digital certificate that will be embedded in the signature.", zh: "选择嵌入签名中的数字证书。" },
   "sign.nameLabel": { en: "Signer name", zh: "签名人" },
+  "nameLabel.help": { en: "Optional. Defaults to the certificate name if left blank.", zh: "可选。如留空则默认使用证书名称。" },
   "sign.outputLabel": { en: "Output file", zh: "输出文件" },
   "sign.outputHint": { en: "Will be saved next to the original with _signed suffix", zh: "将保存在原文件旁，添加 _signed 后缀" },
   "sign.button": { en: "Sign Document", zh: "签名文件" },
@@ -30,14 +37,24 @@ export const translations: Dict = {
 
   // Verify page
   "verify.heading": { en: "Verify a PDF Signature", zh: "验证 PDF 签名" },
+  "verify.intro": {
+    en: "Select a PDF that was previously signed with this tool. Verification checks whether the document has been altered since it was signed.",
+    zh: "选择此前用本工具签名过的 PDF。验证功能会检查文件自签名以来是否被篡改。",
+  },
   "verify.selectPdf": { en: "Select signed PDF", zh: "选择已签名的 PDF" },
+  "verify.selectPdf.help": { en: "Pick the signed PDF you want to check.", zh: "选择要核验的已签名 PDF。" },
   "verify.button": { en: "Verify Signature", zh: "验证签名" },
   "verify.result": { en: "Verification result", zh: "验证结果" },
   "verify.error": { en: "Verification failed", zh: "验证失败" },
 
   // Cert page
   "cert.heading": { en: "Manage Certificates", zh: "管理证书" },
+  "cert.intro": {
+    en: "A certificate is a digital identity used to sign PDF documents. Generate one here and it will be stored locally. You can create multiple certificates for different purposes and set one as the default for new signatures.",
+    zh: "证书是用于签署 PDF 文件的数字身份。在此生成后将本地存储。你可以创建多个用途不同的证书，并指定其中一个作为新签名的默认证书。",
+  },
   "cert.nameLabel": { en: "Certificate name", zh: "证书名称" },
+  "cert.namePlaceholder": { en: "e.g. Personal, Work, Client A", zh: "如：个人、工作、客户 A" },
   "cert.generate": { en: "Generate New", zh: "生成新证书" },
   "cert.empty": { en: "No certificates yet. Generate one above.", zh: "暂无证书，请在上方生成。" },
   "cert.default": { en: "Default", zh: "默认" },

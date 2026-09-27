@@ -63,12 +63,13 @@ export default function CertPage({ lang }: Props) {
   return (
     <div className="page">
       <h2 className="page-title">{t("cert.heading", lang)}</h2>
+      <p className="page-intro">{t("cert.intro", lang)}</p>
       <div className="page-body">
         <div className="form-row form-row-inline">
           <input
             className="form-input"
             type="text"
-            placeholder={t("cert.nameLabel", lang)}
+            placeholder={t("cert.namePlaceholder", lang)}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleGenerate(); }}
