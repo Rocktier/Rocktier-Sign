@@ -58,10 +58,11 @@ jobs:
           node-version: 24
           cache: 'npm'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build sign-engine (arm64)
+      - name: Build sign-engine (all platforms)
         run: |
           cd sign-engine
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../src-tauri/sign-engine-macos .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o ../src-tauri/sign-engine-macos .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o ../src-tauri/sign-engine-windows.exe .
           cd ..
       - name: Install dependencies
         run: npm ci
@@ -100,11 +101,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-      - name: Build sign-engine (Windows)
+      - name: Build sign-engine (all platforms)
         run: |
           cd sign-engine
           $env:CGO_ENABLED='0'; $env:GOOS='windows'; $env:GOARCH='amd64'
           go build -o ../src-tauri/sign-engine-windows.exe .
+          $env:GOOS='darwin'; $env:GOARCH='arm64'
+          go build -o ../src-tauri/sign-engine-macos .
           cd ..
       - name: Install dependencies
         run: npm ci
