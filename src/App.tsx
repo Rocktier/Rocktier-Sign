@@ -70,6 +70,10 @@ function App() {
           <button className="sidebar-theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>
             {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
           </button>
+          <div className="lang-switch">
+            <button className={`lang-btn${lang === "en" ? " active" : ""}`} onClick={() => setLang("en")}>EN</button>
+            <button className={`lang-btn${lang === "zh" ? " active" : ""}`} onClick={() => setLang("zh")}>中文</button>
+          </div>
         </div>
       </nav>
 

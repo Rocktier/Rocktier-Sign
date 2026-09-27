@@ -42,13 +42,10 @@ export default function VerifyPage({ lang }: Props) {
   const copyResult = async () => {
     if (!result) return;
     try {
-      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
-      await writeText(result);
-    } catch {
-      try { await navigator.clipboard.writeText(result); } catch { /* ignore */ }
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(result);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* ignore */ }
   };
 
   return (

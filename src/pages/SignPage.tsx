@@ -70,11 +70,8 @@ export default function SignPage({ lang }: Props) {
   const copyOutput = async () => {
     if (!outputPath) return;
     try {
-      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
-      await writeText(outputPath);
-    } catch {
-      try { await navigator.clipboard.writeText(outputPath); } catch { /* ignore */ }
-    }
+      await navigator.clipboard.writeText(outputPath);
+    } catch { /* ignore */ }
   };
 
   const resultPath = result?.ok
