@@ -1,83 +1,83 @@
-import { useEffect, useState } from "react";
-import { buildMenu } from "./i18n";
+import { useEffect, useState, useCallback } from "react";
+import { buildMenu, t, type Lang } from "./i18n";
+import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
+import { SignBadge } from "./components/Icons";
+import SignPage from "./pages/SignPage";
+import VerifyPage from "./pages/VerifyPage";
+import CertPage from "./pages/CertPage";
+
+type Page = "sign" | "verify" | "cert";
+
+const NAV_PAGES: { id: Page; icon: React.ReactNode; labelKey: Parameters<typeof t>[0] }[] = [
+  { id: "sign", icon: <SignPenIcon size={18} />, labelKey: "nav.sign" },
+  { id: "verify", icon: <CheckIcon size={18} />, labelKey: "nav.verify" },
+  { id: "cert", icon: <KeyIcon size={18} />, labelKey: "nav.cert" },
+];
+
+const THEME_KEY = "rj-theme";
+const LANG_KEY = "rj-lang";
 
 function App() {
-  const [lang, setLang] = useState<"en" | "zh">("en");
+  const [lang, setLang] = useState<Lang>(() => {
+    const saved = localStorage.getItem(LANG_KEY);
+    return saved === "zh" || saved === "en" ? saved : "en";
+  });
+  const [page, setPage] = useState<Page>("sign");
+  const [theme, setTheme] = useState<"dark" | "light">(
+    () => (localStorage.getItem(THEME_KEY) as "dark" | "light") ?? "dark"
+  );
 
   useEffect(() => {
     buildMenu(lang).catch(console.error);
   }, [lang]);
 
-  const t = (en: string, zh: string) => (lang === "zh" ? zh : en);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  }, [theme]);
+
+  // Persist language choice (Batch 2 #10 fix)
+  useEffect(() => {
+    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+  }, [lang]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }, []);
 
   return (
-    <div style={{
-      width: "100vw",
-      height: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "var(--bg-primary)",
-      color: "var(--text-primary)",
-      fontFamily: "var(--font)",
-    }}>
-      <div style={{
-        position: "absolute",
-        top: 16,
-        right: 16,
-        display: "flex",
-        gap: 8,
-      }}>
-        <button
-          onClick={() => setLang("en")}
-          style={{
-            padding: "4px 12px",
-            borderRadius: "var(--radius-sm)",
-            border: `1px solid ${lang === "en" ? "var(--accent)" : "var(--border)"}`,
-            background: lang === "en" ? "var(--bg-card-hover)" : "var(--bg-card)",
-            color: "var(--text-primary)",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >EN</button>
-        <button
-          onClick={() => setLang("zh")}
-          style={{
-            padding: "4px 12px",
-            borderRadius: "var(--radius-sm)",
-            border: `1px solid ${lang === "zh" ? "var(--accent)" : "var(--border)"}`,
-            background: lang === "zh" ? "var(--bg-card-hover)" : "var(--bg-card)",
-            color: "var(--text-primary)",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >中文</button>
-      </div>
+    <div className="app-root">
+      <nav className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-brand">
+            <SignBadge size={32} />
+            <span className="brand-name">{t("app.title", lang)}</span>
+          </div>
+        </div>
+        <div className="sidebar-nav">
+          {NAV_PAGES.map((item) => (
+            <button
+              key={item.id}
+              className={`sidebar-item${page === item.id ? " active" : ""}`}
+              onClick={() => setPage(item.id)}
+            >
+              <span className="sidebar-icon">{item.icon}</span>
+              <span>{t(item.labelKey, lang)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sidebar-bottom">
+          <button className="sidebar-theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>
+            {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+          </button>
+        </div>
+      </nav>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <div style={{
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          background: "var(--red)",
-          animation: "dotpulse 3s ease-in-out infinite",
-        }} />
-        <h1 style={{ fontSize: 22, fontWeight: 600, margin: 0 }}>Rocktier Sign</h1>
-      </div>
-      <p style={{
-        fontSize: 13,
-        color: "var(--text-secondary)",
-        marginBottom: 32,
-        textAlign: "center",
-        maxWidth: 400,
-        lineHeight: 1.6,
-      }}>
-        {t(
-          "Sign documents on your machine, not someone else's server.\nBuy once, own forever.",
-          "在你的设备上签名文件，而不是别人的服务器。\n一次购买，永久使用。"
-        )}
-      </p>
+      <main className="page-container">
+        {page === "sign" && <SignPage lang={lang} />}
+        {page === "verify" && <VerifyPage lang={lang} />}
+        {page === "cert" && <CertPage lang={lang} />}
+      </main>
     </div>
   );
 }

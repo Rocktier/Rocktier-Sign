@@ -59,6 +59,15 @@
   },
   "plugins": {
     "dialog": null,
-    "fs": null
+    "fs": null,
+    "updater": {
+      "endpoints": [
+        "https://github.com/Rocktier/Rocktier-Sign/releases/latest/download/latest.json"
+      ],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

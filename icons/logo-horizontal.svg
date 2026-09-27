@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400">
+  <!-- Rocktier Sign — Horizontal Logo Lockup -->
+  <!-- Usage: letterheads, site headers, embeds, About dialog brand hero -->
+  <!-- Layout: [family-icon lockup] [wordmark "Rocktier Sign"] -->
+
+  <!-- ── Inline family square mark (400×400) ── -->
+  <g transform="translate(0,0)">
+    <rect x="0" y="0" width="400" height="400" rx="78" ry="78" fill="#0A0A0A"/>
+    <rect x="0" y="0" width="400" height="400" rx="78" ry="78" fill="none" stroke="#333333" stroke-width="5"/>
+    <!-- Badge (scaled down to 400²): original r=160 in 1024² → r=62.5 in 400² -->
+    <circle cx="95" cy="95" r="62" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+    <polyline points="70,97 88,115 125,73" fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Red dot (r=36 in 1024² → r=14 in 400²) -->
+    <circle cx="350" cy="64" r="14" fill="#FF4A3D"/>
+    <!-- "SG" (360pt in 1024² → 140pt in 400²) -->
+    <text x="200" y="253" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="140" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" letter-spacing="-8">SG</text>
+  </g>
+
+  <!-- ── Wordmark ── -->
+  <g transform="translate(460,235)">
+    <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-size="128" font-weight="650" fill="#FFFFFF" letter-spacing="-2">Rocktier Sign</text>
+    <circle cx="830" cy="-35" r="12" fill="#FF4A3D"/>
+  </g>
+</svg>

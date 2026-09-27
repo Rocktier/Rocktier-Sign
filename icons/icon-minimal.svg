@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Rocktier Sign — Minimal mark / favicon (no badge, single-letter "S" for 16×16 legibility) -->
+  <g transform="translate(85.3,85.3) scale(0.8333)">
+    <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="#0A0A0A"/>
+    <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="none" stroke="#333333" stroke-width="6"/>
+
+    <!-- Magnified red pip (r=36) -->
+    <circle cx="860" cy="164" r="36" fill="#FF4A3D"/>
+
+    <!-- Large "S" flowing stroke (scales down to favicon) -->
+    <path d="M620,300 C480,270 400,350 400,430 C400,520 500,560 600,560 L680,560 C780,560 840,610 840,700 C840,800 720,850 580,850 C450,850 370,790 370,700"
+          fill="none" stroke="#FFFFFF" stroke-width="56" stroke-linecap="round"/>
+  </g>
+</svg>

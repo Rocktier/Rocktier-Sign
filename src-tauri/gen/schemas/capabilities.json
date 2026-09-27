@@ -1,1 +1,1 @@
-{"main":{"identifier":"main","description":"Core capabilities for Rocktier Sign","local":true,"windows":["main"],"permissions":["core:default","dialog:default","fs:default","opener:default"]}}
+{"main":{"identifier":"main","description":"Core capabilities for Rocktier Sign","local":true,"windows":["main"],"permissions":["core:default","dialog:default","fs:default",{"identifier":"fs:scope","allow":["$APPDATA/certs/**","$APPDATA/**","$DOCUMENT/**","$DOWNLOAD/**","$DESKTOP/**","$HOME/**","$RESOURCE/*"]},"opener:default","updater:default"]}}

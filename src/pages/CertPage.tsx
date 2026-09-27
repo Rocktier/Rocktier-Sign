@@ -1,0 +1,122 @@
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { t, type Lang } from "../i18n";
+import type { CertInfo } from "../types";
+
+interface Props {
+  lang: Lang;
+}
+
+export default function CertPage({ lang }: Props) {
+  const [certs, setCerts] = useState<CertInfo[]>([]);
+  const [defaultCert, setDefaultCert] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const list = await invoke<CertInfo[]>("list_certs");
+      setCerts(list);
+      const def = await invoke<string | null>("get_default_cert");
+      setDefaultCert(def);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleGenerate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setError(null);
+
+    // Duplicate name check (Batch 2 #6 fix)
+    if (certs.some((c) => c.name === name)) {
+      const ok = window.confirm(`Certificate "${name}" already exists. Overwrite?`);
+      if (!ok) return;
+    }
+
+    setBusy(true);
+    try {
+      await invoke<CertInfo>("generate_key", { name });
+      setNewName("");
+      const list = await invoke<CertInfo[]>("list_certs");
+      if (list.length === 1) {
+        await invoke("set_default_cert", { name });
+      }
+      await load();
+    } catch (e) {
+      setError(`${t("sign.error", lang)}: ${e}`);
+    }
+    setBusy(false);
+  };
+
+  const handleSetDefault = async (name: string) => {
+    try {
+      await invoke("set_default_cert", { name });
+      setDefaultCert(name);
+    } catch (e) {
+      setError(`${e}`);
+    }
+  };
+
+  return (
+    <div className="page">
+      <h2 className="page-title">{t("cert.heading", lang)}</h2>
+      <div className="page-body">
+        <div className="form-row form-row-inline">
+          <input
+            className="form-input"
+            type="text"
+            placeholder={t("cert.nameLabel", lang)}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleGenerate(); }}
+          />
+          <button
+            className="btn-primary"
+            onClick={handleGenerate}
+            disabled={!newName.trim() || busy}
+          >
+            {busy ? t("common.loading", lang) : t("cert.generate", lang)}
+          </button>
+        </div>
+
+        {error && <div className="result result-error">{error}</div>}
+
+        {certs.length === 0 ? (
+          <div className="empty-state">{t("cert.empty", lang)}</div>
+        ) : (
+          <div className="cert-list">
+            {certs.map((c) => {
+              const isDefault = defaultCert === c.name;
+              return (
+                <div key={c.name} className={`cert-card${isDefault ? " cert-default" : ""}`}>
+                  <div className="cert-info">
+                    <div className="cert-name">
+                      {c.name}
+                      {isDefault && (
+                        <span className="cert-badge">{t("cert.default", lang)}</span>
+                      )}
+                    </div>
+                    <div className="cert-meta">
+                      {t("cert.created", lang)}: {new Date(c.created).toLocaleDateString()}
+                    </div>
+                  </div>
+                  {!isDefault && (
+                    <button
+                      className="btn-small"
+                      onClick={() => handleSetDefault(c.name)}
+                    >
+                      {t("cert.setDefault", lang)}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
