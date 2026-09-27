@@ -102,6 +102,8 @@ fn force_close(window: tauri::Window) {
 
 /// Sign a PDF file using the embedded sign-engine binary.
 /// Cert identified by cert_id (stored cert name) or direct key_path/cert_path.
+/// When visual_sig is true, generates a default signature appearance PNG and
+/// positions it according to the `position` parameter.
 #[tauri::command]
 fn sign_pdf(
     app: tauri::AppHandle,
@@ -111,6 +113,9 @@ fn sign_pdf(
     cert_id: Option<String>,
     key_path: Option<String>,
     cert_path: Option<String>,
+    visual_sig: Option<bool>,
+    image_path: Option<String>,
+    position: Option<String>,
 ) -> Result<String, String> {
     let engine = engine_path(&app)?;
 
@@ -134,14 +139,44 @@ fn sign_pdf(
         }
     };
 
-    let output_result = Command::new(&engine)
-        .arg("sign")
+    let mut cmd = Command::new(&engine);
+    cmd.arg("sign")
         .arg("-input").arg(&input)
         .arg("-output").arg(&output)
         .arg("-key").arg(&resolved_key)
         .arg("-cert").arg(&resolved_cert)
-        .arg("-name").arg(&name)
-        .output()
+        .arg("-name").arg(&name);
+
+    // Add visual signature appearance if requested
+    if visual_sig == Some(true) {
+        let pos = position.unwrap_or_else(|| "bottom-right".to_string());
+        cmd.arg("-position").arg(&pos);
+
+        // If no custom image, generate a default sig appearance
+        if image_path.is_none() {
+            let data_dir = app.path().app_data_dir()
+                .map_err(|e| format!("app_data_dir: {e}"))?;
+            let sig_path = data_dir.join("sig-appearance.png");
+            let sig_str = sig_path.to_string_lossy().into_owned();
+
+            let gen_output = Command::new(&engine)
+                .arg("generate-sig-image")
+                .arg("-name").arg(&name)
+                .arg("-output").arg(&sig_str)
+                .output()
+                .map_err(|e| format!("engine exec: {e}"))?;
+
+            if !gen_output.status.success() {
+                return Err(String::from_utf8_lossy(&gen_output.stderr).to_string());
+            }
+
+            cmd.arg("-image").arg(&sig_str);
+        } else {
+            cmd.arg("-image").arg(image_path.unwrap());
+        }
+    }
+
+    let output_result = cmd.output()
         .map_err(|e| format!("engine exec: {e}"))?;
 
     if output_result.status.success() {

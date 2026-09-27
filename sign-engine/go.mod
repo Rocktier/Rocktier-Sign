@@ -2,7 +2,10 @@ module rocktier/sign-engine
 
 go 1.27.0
 
-require github.com/digitorus/pdfsign v0.9.0
+require (
+	github.com/digitorus/pdfsign v0.9.0
+	golang.org/x/image v0.30.0
+)
 
 require (
 	github.com/digitorus/pdf v0.1.2 // indirect

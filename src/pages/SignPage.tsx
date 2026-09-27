@@ -15,6 +15,9 @@ export default function SignPage({ lang }: Props) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [certs, setCerts] = useState<CertInfo[]>([]);
+  const [visualSig, setVisualSig] = useState(true);
+  const [sigPosition, setSigPosition] = useState("bottom-right");
+  const [sigImagePath, setSigImagePath] = useState<string | null>(null);
 
   const loadCerts = async () => {
     try {
@@ -44,6 +47,18 @@ export default function SignPage({ lang }: Props) {
     } catch { /* cancelled */ }
   };
 
+  const pickSigImage = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
+      });
+      if (typeof selected === "string") {
+        setSigImagePath(selected);
+      }
+    } catch { /* cancelled */ }
+  };
+
   const handleSign = async () => {
     if (!pdfPath || !certId) return;
     setBusy(true);
@@ -59,6 +74,9 @@ export default function SignPage({ lang }: Props) {
         output: out,
         name: signerName || certId,
         certId,
+        visualSig,
+        imagePath: sigImagePath,
+        position: sigPosition,
       });
       setResult({ ok: true, msg: `${t("sign.success", lang)}\n${out}` });
     } catch (e) {
@@ -128,6 +146,48 @@ export default function SignPage({ lang }: Props) {
             onChange={(e) => setOutputPath(e.target.value || null)}
           />
         </div>
+
+        <div className="form-row">
+          <label>{t("sign.visualLabel", lang)}</label>
+          <label className="form-toggle">
+            <input
+              type="checkbox"
+              checked={visualSig}
+              onChange={(e) => setVisualSig(e.target.checked)}
+            />
+            <span>{t("sign.visualToggle", lang)}</span>
+          </label>
+          <p className="form-helper">{t("sign.visualHelp", lang)}</p>
+        </div>
+
+        {visualSig && (
+          <div className="form-row form-row-visual">
+            <label>{t("sign.positionLabel", lang)}</label>
+            <div className="sig-position-grid">
+              {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((pos) => (
+                <button
+                  key={pos}
+                  type="button"
+                  className={`sig-position-btn${sigPosition === pos ? " active" : ""}`}
+                  onClick={() => setSigPosition(pos)}
+                >
+                  {t(`sign.position.${pos}`, lang)}
+                </button>
+              ))}
+            </div>
+            <div className="sig-image-row">
+              <button type="button" className="btn-secondary btn-small" onClick={pickSigImage}>
+                {sigImagePath ? sigImagePath.split(/[\\/]/).pop() : t("sign.uploadSig", lang)}
+              </button>
+              {sigImagePath && (
+                <button type="button" className="btn-link" onClick={() => setSigImagePath(null)}>
+                  ✕
+                </button>
+              )}
+            </div>
+            <p className="form-helper">{t("sigPosition.help", lang)}</p>
+          </div>
+        )}
 
         <button
           className="btn-primary"

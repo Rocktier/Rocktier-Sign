@@ -524,3 +524,83 @@ button {
   color: var(--text-tertiary);
   margin-top: 4px;
 }
+
+/* ============ Visual Signature UI ============ */
+
+.form-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.form-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.form-row-visual {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sig-position-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 240px;
+}
+
+.sig-position-btn {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.sig-position-btn:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.sig-position-btn.active {
+  border-color: var(--accent);
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.sig-image-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  line-height: 1;
+}
+
+.btn-link:hover {
+  color: var(--red);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
