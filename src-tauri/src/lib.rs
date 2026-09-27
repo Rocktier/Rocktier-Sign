@@ -225,9 +225,7 @@ fn list_certs(app: tauri::AppHandle) -> Result<Vec<CertInfo>, String> {
                             .and_then(|m| m.created())
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
-                            .flatten()
-                            .map(|dt| dt.to_rfc3339())
+                            .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0).to_rfc3339())
                             .unwrap_or_default();
                         certs.push(CertInfo {
                             name: stem.to_string(),
