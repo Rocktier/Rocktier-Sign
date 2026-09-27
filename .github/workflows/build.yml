@@ -32,17 +32,17 @@ jobs:
           components: clippy
       - name: Install dependencies
         run: npm ci
-      - name: Type check
-        run: npm run build
-      - name: Rust clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Build sign-engine (all targets)
         run: |
           cd sign-engine
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o ../src-tauri/sign-engine-windows.exe .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../sign-engine-macos-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../src-tauri/sign-engine-macos .
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o ../sign-engine-macos-amd64 .
           cd ..
+      - name: Type check
+        run: npm run build
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
   build-macos:
     name: macOS (Apple Silicon)
