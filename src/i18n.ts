@@ -16,6 +16,8 @@ export const translations: Dict = {
   "nav.verify": { en: "Verify", zh: "验证" },
   "nav.cert": { en: "Certificates", zh: "证书" },
   "nav.theme": { en: "Theme", zh: "主题" },
+  "nav.theme.light": { en: "Switch to light mode", zh: "切换到浅色模式" },
+  "nav.theme.dark": { en: "Switch to dark mode", zh: "切换到深色模式" },
 
   // Sign page
   "sign.heading": { en: "Sign a PDF", zh: "签名 PDF" },
@@ -85,7 +87,9 @@ export function t(key: string, lang: Lang, vars?: Record<string, string | number
   let text = entry[lang];
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
-      text = text.replace(`{${k}}`, String(v));
+      // 必须替换全部出现：字符串 replace 只替换首个匹配，
+      // 译者写 "{n} times / {n} files" 时第二个占位符会以字面量出现在用户屏幕上。
+      text = text.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
     }
   }
   return text;

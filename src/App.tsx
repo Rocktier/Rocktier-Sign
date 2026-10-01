@@ -14,8 +14,8 @@ const NAV_PAGES: { id: Page; icon: React.ReactNode; labelKey: Parameters<typeof 
   { id: "cert", icon: <KeyIcon size={18} />, labelKey: "nav.cert" },
 ];
 
-const THEME_KEY = "rj-theme";
-const LANG_KEY = "rj-lang";
+const THEME_KEY = "rocktier.sign.theme";
+const LANG_KEY = "rocktier.sign.lang";
 
 function App() {
   const [lang, setLang] = useState<Lang>(() => {
@@ -67,7 +67,12 @@ function App() {
           ))}
         </div>
         <div className="sidebar-bottom">
-          <button className="sidebar-theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>
+          <button
+            className="sidebar-theme-toggle"
+            onClick={toggleTheme}
+            title={t(theme === "dark" ? "nav.theme.light" : "nav.theme.dark", lang)}
+            aria-label={t(theme === "dark" ? "nav.theme.light" : "nav.theme.dark", lang)}
+          >
             {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
           </button>
           <div className="lang-switch">

@@ -48,6 +48,12 @@
 }
 
 [data-theme="light"] {
+  /* 深色语义令牌必须在浅色里重写：否则滚动条/选中高亮是白色，压在白底上等于隐形 */
+  --accent-glow: rgba(0, 0, 0, 0.08);
+  --shadow: rgba(0, 0, 0, 0.12);
+  --scrollbar: rgba(0, 0, 0, 0.18);
+  --scrollbar-hover: rgba(0, 0, 0, 0.32);
+  --selection: rgba(0, 0, 0, 0.14);
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
   --bg-card: rgba(0, 0, 0, 0.03);
