@@ -105,6 +105,7 @@ fn force_close(window: tauri::Window) {
 /// When visual_sig is true, generates a default signature appearance PNG and
 /// positions it according to the `position` parameter.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn sign_pdf(
     app: tauri::AppHandle,
     input: String,
@@ -153,7 +154,9 @@ fn sign_pdf(
         cmd.arg("-position").arg(&pos);
 
         // If no custom image, generate a default sig appearance
-        if image_path.is_none() {
+        if let Some(image_path) = image_path {
+            cmd.arg("-image").arg(&image_path);
+        } else {
             let data_dir = app.path().app_data_dir()
                 .map_err(|e| format!("app_data_dir: {e}"))?;
             let sig_path = data_dir.join("sig-appearance.png");
@@ -171,8 +174,6 @@ fn sign_pdf(
             }
 
             cmd.arg("-image").arg(&sig_str);
-        } else {
-            cmd.arg("-image").arg(image_path.unwrap());
         }
     }
 
