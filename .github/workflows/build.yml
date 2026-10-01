@@ -77,9 +77,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload DMG to Release
         run: |
+          uploaded=0
           for i in {1..10}; do
-            gh release upload ${{ inputs.release_tag || github.ref_name }} src-tauri/target/release/bundle/dmg/*.dmg --clobber && break || sleep 5
+            if gh release upload ${{ inputs.release_tag || github.ref_name }} src-tauri/target/release/bundle/dmg/*.dmg --clobber; then
+              uploaded=1
+              break
+            fi
+            echo "  upload attempt $i failed, retrying..."
+            sleep 5
           done
+          [ "$uploaded" -eq 1 ] || { echo "::error::failed to upload DMG after 10 retries"; exit 1; }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -124,11 +131,18 @@ jobs:
       - name: Upload MSI / NSIS to Release
         shell: bash
         run: |
+          uploaded=0
           for i in {1..10}; do
-            gh release upload ${{ inputs.release_tag || github.ref_name }} \
+            if gh release upload ${{ inputs.release_tag || github.ref_name }} \
               src-tauri/target/release/bundle/msi/*.msi \
-              src-tauri/target/release/bundle/nsis/*.exe --clobber && break || sleep 5
+              src-tauri/target/release/bundle/nsis/*.exe --clobber; then
+              uploaded=1
+              break
+            fi
+            echo "  upload attempt $i failed, retrying..."
+            sleep 5
           done
+          [ "$uploaded" -eq 1 ] || { echo "::error::failed to upload MSI/NSIS after 10 retries"; exit 1; }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
