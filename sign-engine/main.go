@@ -380,7 +380,9 @@ func cmdVerify() {
 	defer file.Close()
 
 	options := verify.DefaultVerifyOptions()
-	options.AllowUntrustedRoots = true
+	// Self-signed certs are trusted via the embedded certificate, not via a
+	// root exemption — leave the chain check on so a forged chain fails.
+	options.AllowUntrustedRoots = false
 
 	result, err := verify.VerifyFileWithOptions(file, options)
 	if err != nil {
@@ -418,8 +420,17 @@ func cmdGenerateKey() {
 		os.Exit(2)
 	}
 
+	// Random 128-bit serial: a constant serial (big.NewInt(1)) means every
+	// user's certificate shares the same identity number — no PKI semantics.
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating serial number: %v\n", err)
+		os.Exit(2)
+	}
+
 	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: serial,
 		Subject: pkix.Name{
 			CommonName:   name,
 			Organization: []string{"Rocktier Sign (Self-Signed)"},
@@ -437,8 +448,9 @@ func cmdGenerateKey() {
 		os.Exit(2)
 	}
 
-	// Write private key
-	keyFile, err := os.Create(keyOut)
+	// Write private key. 0600 — a "signatures unforgeable" tool must not
+	// leave the signing key group/world-readable (os.Create → 0644).
+	keyFile, err := os.OpenFile(keyOut, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating key file: %v\n", err)
 		os.Exit(2)

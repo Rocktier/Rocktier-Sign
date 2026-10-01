@@ -205,7 +205,28 @@ fn verify_pdf(
         .output()
         .map_err(|e| format!("engine exec: {e}"))?;
 
+    // A failed verify (nonzero exit) must not surface as Ok — "no conclusion"
+    // and "still working" must never look the same in the UI.
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Verification failed: {}", stderr.trim()));
+    }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Reject certificate names that could escape the cert store directory
+/// (`../`, absolute paths, path separators, hidden files).
+fn sanitize_cert_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains("..")
+        || trimmed.starts_with('.')
+    {
+        return Err("Invalid certificate name".to_string());
+    }
+    Ok(trimmed.to_string())
 }
 
 /// Generate a self-signed certificate using the sign-engine.
@@ -220,9 +241,18 @@ fn generate_key(
         return Err(format!("sign-engine not found at {engine:?}"));
     }
 
+    let name = sanitize_cert_name(&name)?;
     let store = cert_store_dir(&app)?;
     let key_out = store.join(format!("{name}.key"));
     let cert_out = store.join(format!("{name}.crt"));
+
+    // Overwriting silently destroys the old private key — every signature the
+    // user made with it becomes unverifiable *by them*. Refuse instead.
+    if key_out.exists() || cert_out.exists() {
+        return Err(format!(
+            "A certificate named \"{name}\" already exists. Choose a different name."
+        ));
+    }
 
     let output_result = Command::new(&engine)
         .arg("generate-key")
@@ -283,6 +313,7 @@ fn list_certs(app: tauri::AppHandle) -> Result<Vec<CertInfo>, String> {
 /// Set a certificate as the default.
 #[tauri::command]
 fn set_default_cert(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let name = sanitize_cert_name(&name)?;
     let store = cert_store_dir(&app)?;
     let key = store.join(format!("{name}.key"));
     let crt = store.join(format!("{name}.crt"));
