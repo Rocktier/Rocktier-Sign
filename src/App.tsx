@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
@@ -23,6 +25,9 @@ function App() {
     return saved === "zh" || saved === "en" ? saved : "en";
   });
   const [page, setPage] = useState<Page>("sign");
+  // 原生菜单「打开…」的请求计数：传给 SignPage，在其 effect 里触发文件选择。
+  // 用递增计数而非布尔/事件，保证菜单先于页面挂载发出时也不会丢（挂载时 >0 即触发）。
+  const [signOpenRequest, setSignOpenRequest] = useState(0);
   const [theme, setTheme] = useState<"dark" | "light">(
     () => (localStorage.getItem(THEME_KEY) as "dark" | "light") ?? "dark"
   );
@@ -49,10 +54,47 @@ function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
+  // 原生菜单事件接线（Rust on_menu_event emit "menu-action"，此前前端无监听，
+  // 菜单项点了没反应）。action 名以 lib.rs build_app_menu 实际注册的 id 为准。
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    listen<string>("menu-action", (e) => {
+      switch (e.payload) {
+        case "open":
+          // 打开 PDF：切到签名页并触发其现有文件选择逻辑
+          setPage("sign");
+          setSignOpenRequest((n) => n + 1);
+          break;
+        case "toggle-theme":
+          toggleTheme();
+          break;
+        case "website":
+          void invoke("open_url", { url: "https://rocktier.com/" }).catch(() => {});
+          break;
+        case "feedback":
+          void invoke("open_url", { url: "mailto:hello@rocktier.com" }).catch(() => {});
+          break;
+        default:
+          // 未接线的 action 降级为 no-op，不弹错误
+          console.warn("[menu-action] unhandled:", e.payload);
+      }
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [toggleTheme]);
+
   return (
     <div className="app-root">
       <nav className="sidebar">
-        <div className="sidebar-header">
+        {/* Overlay+hiddenTitle 标题栏下窗口不可拖动：在此顶栏元素上声明拖动区。
+            Tauri 只在属性元素自身被命中时才拖动，brand 图标/文字等子元素交互不受影响。 */}
+        <div className="sidebar-header" data-tauri-drag-region>
           <div className="sidebar-brand">
             <SignBadge size={32} />
             <span className="brand-name">{t("app.title", lang)}</span>
@@ -87,7 +129,7 @@ function App() {
       </nav>
 
       <main className="page-container">
-        {page === "sign" && <SignPage lang={lang} />}
+        {page === "sign" && <SignPage lang={lang} openRequest={signOpenRequest} />}
         {page === "verify" && <VerifyPage lang={lang} />}
         {page === "cert" && <CertPage lang={lang} />}
       </main>

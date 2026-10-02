@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev"
+    "tauri:dev": "tauri dev",
+    "family:check": "node scripts/family-check.mjs --self --product sign"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

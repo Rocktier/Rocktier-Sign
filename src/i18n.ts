@@ -37,10 +37,10 @@ export const translations: Dict = {
   "sign.visualToggle": { en: "Show signature on document", zh: "在文档上显示签名" },
   "sign.visualHelp": { en: "Adds a visible signature block to the PDF. Always also includes a hidden cryptographic signature.", zh: "在 PDF 上添加可视签名块。始终同时包含隐藏的数字签名。" },
   "sign.positionLabel": { en: "Signature position", zh: "签名位置" },
-  "position.top-left": { en: "Top-left", zh: "左上" },
-  "position.top-right": { en: "Top-right", zh: "右上" },
-  "position.bottom-left": { en: "Bottom-left", zh: "左下" },
-  "position.bottom-right": { en: "Bottom-right", zh: "右下" },
+  "sign.position.top-left": { en: "Top-left", zh: "左上" },
+  "sign.position.top-right": { en: "Top-right", zh: "右上" },
+  "sign.position.bottom-left": { en: "Bottom-left", zh: "左下" },
+  "sign.position.bottom-right": { en: "Bottom-right", zh: "右下" },
   "sigPosition.help": { en: "Where to place the signature block on the page. Upload a custom stamp image below or use the default appearance.", zh: "选择签名块在页面上的位置。可上传自定义签章图片或使用默认外观。" },
   "sign.uploadSig": { en: "Upload stamp (optional)", zh: "上传签章（可选）" },
   "sign.button": { en: "Sign Document", zh: "签名文件" },
@@ -77,6 +77,7 @@ export const translations: Dict = {
   "cert.setDefault": { en: "Set as default", zh: "设为默认" },
   "cert.created": { en: "Created", zh: "创建时间" },
   "cert.signCount": { en: "{n} signatures", zh: "已签 {n} 份" },
+  "cert.error": { en: "Certificate generation failed", zh: "证书生成失败" },
 
   // Common
   "common.cancel": { en: "Cancel", zh: "取消" },
@@ -102,9 +103,4 @@ export function t(key: string, lang: Lang, vars?: Record<string, string | number
 /// Build the native menu in the given UI language.
 export async function buildMenu(lang: Lang): Promise<void> {
   await invoke("build_menu", { lang });
-}
-
-/// Trigger the native updater check.
-export async function checkForUpdates(): Promise<void> {
-  await invoke("check_updates").catch(() => {});
 }

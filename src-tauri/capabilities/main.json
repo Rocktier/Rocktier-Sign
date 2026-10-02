@@ -18,7 +18,6 @@
         "$RESOURCE/*"
       ]
     },
-    "opener:default",
-    "updater:default"
+    "opener:default"
   ]
 }

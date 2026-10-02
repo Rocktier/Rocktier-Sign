@@ -5,9 +5,11 @@ import type { CertInfo } from "../types";
 
 interface Props {
   lang: Lang;
+  /** 原生菜单「打开…」请求计数：>0 时触发文件选择（递增即再次触发） */
+  openRequest?: number;
 }
 
-export default function SignPage({ lang }: Props) {
+export default function SignPage({ lang, openRequest = 0 }: Props) {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [certId, setCertId] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
@@ -31,6 +33,16 @@ export default function SignPage({ lang }: Props) {
   };
 
   useEffect(() => { loadCerts(); }, []);
+
+  // 原生菜单「打开…」→ 复用现有文件选择逻辑。用请求计数做依赖：
+  // 页面尚未挂载时菜单先到也没关系（挂载时 openRequest 已 >0，effect 照常跑）。
+  useEffect(() => {
+    if (openRequest > 0) {
+      void pickPdf();
+    }
+    // pickPdf 每次渲染都是新引用，但内部只调用 setState，无需进依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   const pickPdf = async () => {
     try {

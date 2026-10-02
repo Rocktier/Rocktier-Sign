@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_updater::Builder as UpdaterBuilder;
 use tauri::{Emitter, Manager, WindowEvent};
 
 /// Platform-specific sign-engine binary name.
@@ -537,7 +536,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(UpdaterBuilder::new().build())
         .setup(|app| {
             app.manage(Ready(AtomicBool::new(false)));
             app.manage(InitialFile(Mutex::new(file_from_args())));

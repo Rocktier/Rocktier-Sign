@@ -30,12 +30,6 @@ export default function CertPage({ lang }: Props) {
     if (!name) return;
     setError(null);
 
-    // Duplicate name check (Batch 2 #6 fix)
-    if (certs.some((c) => c.name === name)) {
-      const ok = window.confirm(`Certificate "${name}" already exists. Overwrite?`);
-      if (!ok) return;
-    }
-
     setBusy(true);
     try {
       await invoke<CertInfo>("generate_key", { name });
@@ -46,7 +40,10 @@ export default function CertPage({ lang }: Props) {
       }
       await load();
     } catch (e) {
-      setError(`${t("sign.error", lang)}: ${e}`);
+      // Rust 侧 generate_key 拒绝同名证书（静默覆盖会毁掉旧私钥）。
+      // 此前端 window.confirm 问一遍「是否覆盖」再被 Rust 拒绝，是死路——
+      // 现直接把 Rust 的错误信息（含「换一个名字」提示）原样展示出来。
+      setError(`${t("cert.error", lang)}: ${e}`);
     }
     setBusy(false);
   };
