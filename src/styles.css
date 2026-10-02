@@ -33,6 +33,7 @@
   --dot: rgba(255, 255, 255, 0.55);
   --danger: rgba(255, 74, 61, 0.9);
   --success: rgba(48, 209, 88, 0.9);
+  --warning: rgba(255, 191, 64, 0.95);
   --shadow: rgba(0, 0, 0, 0.4);
   --scrollbar: rgba(255, 255, 255, 0.1);
   --scrollbar-hover: rgba(255, 255, 255, 0.2);
@@ -69,6 +70,7 @@
   --dot: rgba(0, 0, 0, 0.55);
   --danger: rgba(230, 69, 55, 0.9);
   --success: rgba(34, 178, 77, 0.9);
+  --warning: rgba(191, 134, 0, 0.95);
 }
 
 *, *::before, *::after {
@@ -484,6 +486,56 @@ button {
   white-space: nowrap;
   max-width: 100%;
 }
+
+/* ── Verify verdict cards (P0-14): green / amber / red, never a neutral dump ── */
+.verify-valid { border-color: rgba(48, 209, 88, 0.35); }
+.verify-untrusted { border-color: rgba(255, 191, 64, 0.45); }
+.verify-invalid { border-color: rgba(255, 74, 61, 0.45); }
+.verify-error { border-color: rgba(255, 74, 61, 0.45); }
+
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.verify-banner-valid { background: rgba(48, 209, 88, 0.12); color: var(--success); }
+.verify-banner-untrusted { background: rgba(255, 191, 64, 0.12); color: var(--warning); }
+.verify-banner-invalid { background: rgba(255, 74, 61, 0.12); color: var(--danger); }
+
+.verify-summary {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.verify-signer {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.verify-signer + .verify-signer { margin-top: 8px; }
+.verify-signer-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.verify-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+  font-size: 12.5px;
+}
+.verify-checks li.ok { color: var(--success); }
+.verify-checks li.warn { color: var(--warning); }
+.verify-checks li.bad { color: var(--danger); font-weight: 600; }
 
 .result-copy-btn {
   margin-top: 8px;

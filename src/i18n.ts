@@ -58,6 +58,10 @@ export const translations: Dict = {
   "verify.button": { en: "Verify Signature", zh: "验证签名" },
   "verify.result": { en: "Verification result", zh: "验证结果" },
   "verify.error": { en: "Verification failed", zh: "验证失败" },
+  "verify.verdict.valid": { en: "Valid — signature verified", zh: "有效 — 签名已验证" },
+  "verify.verdict.untrusted": { en: "Valid but untrusted (self-signed)", zh: "有效但不可信（自签名）" },
+  "verify.verdict.invalid": { en: "Invalid — signature does not match", zh: "无效 — 签名不匹配" },
+  "verify.verdict.none": { en: "No digital signature found", zh: "未发现数字签名" },
 
   // Cert page
   "cert.heading": { en: "Manage Certificates", zh: "管理证书" },

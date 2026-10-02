@@ -380,8 +380,9 @@ func cmdVerify() {
 	defer file.Close()
 
 	options := verify.DefaultVerifyOptions()
-	// Self-signed certs are trusted via the embedded certificate, not via a
-	// root exemption — leave the chain check on so a forged chain fails.
+	// Keep the chain check ON. A self-signed certificate is NOT auto-trusted by
+	// the verifier (the old code's comment claimed otherwise) — TrustedIssuer is
+	// false for self-signed, which the UI surfaces as "valid but untrusted".
 	options.AllowUntrustedRoots = false
 
 	result, err := verify.VerifyFileWithOptions(file, options)
@@ -390,8 +391,72 @@ func cmdVerify() {
 		os.Exit(3)
 	}
 
-	jsonData, _ := json.MarshalIndent(result, "", "  ")
+	// Classify every signer and derive an overall verdict + exit code so the
+	// host can colour the result. A tampered file must never look identical to
+	// a valid one (P0-14).
+	verdict := "VALID"
+	exitCode := 0
+	var signers []map[string]interface{}
+	if len(result.Signers) == 0 {
+		verdict = "NO_SIGNATURES"
+		exitCode = 4
+	}
+	for _, s := range result.Signers {
+		// ExtKeyUsageValid lives on the nested Certificate, not on Signer.
+		ekuValid := true
+		if len(s.Certificates) > 0 {
+			ekuValid = s.Certificates[0].ExtKeyUsageValid
+		}
+		status := "valid"
+		if !s.ValidSignature {
+			status = "invalid"
+			if exitCode < 4 {
+				exitCode = 4
+			}
+			verdict = "INVALID"
+		} else if !s.TrustedIssuer || !ekuValid || s.RevokedCertificate {
+			status = "untrusted"
+			if exitCode < 5 {
+				exitCode = 5
+			}
+			if verdict == "VALID" {
+				verdict = "UNTRUSTED"
+			}
+		}
+		signerInfo := map[string]interface{}{
+			"name":                s.Name,
+			"valid_signature":     s.ValidSignature,
+			"trusted_issuer":      s.TrustedIssuer,
+			"ext_key_usage_valid": ekuValid,
+			"revoked":             s.RevokedCertificate,
+			"signature_time":      s.SignatureTime,
+			"timestamp_status":    s.TimestampStatus,
+			"status":              status,
+		}
+		signers = append(signers, signerInfo)
+	}
+
+	var summary string
+	switch verdict {
+	case "VALID":
+		summary = fmt.Sprintf("All %d signature(s) are valid and trusted.", len(result.Signers))
+	case "UNTRUSTED":
+		summary = fmt.Sprintf("%d signature(s) present and cryptographically valid, but NOT from a trusted issuer (self-signed or untrusted chain).", len(result.Signers))
+	case "INVALID":
+		summary = fmt.Sprintf("%d signature(s) present; at least one is INVALID — the document may have been altered since signing.", len(result.Signers))
+	case "NO_SIGNATURES":
+		summary = "This PDF contains no digital signatures."
+	}
+
+	out := map[string]interface{}{
+		"verdict":  verdict,
+		"exit_code": exitCode,
+		"summary":  summary,
+		"signers":  signers,
+	}
+	jsonData, _ := json.MarshalIndent(out, "", "  ")
 	fmt.Println(string(jsonData))
+	os.Exit(exitCode)
 }
 
 func cmdGenerateKey() {

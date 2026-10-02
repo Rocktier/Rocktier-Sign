@@ -34,6 +34,24 @@ pub struct CertInfo {
 /// PDF file extensions we handle.
 const PDF_EXTS: [&str; 1] = ["pdf"];
 
+/// OS secure-store service name for private keys.
+/// On macOS this is a Keychain entry, on Windows the Credential Manager
+/// (DPAPI-backed), on Linux libsecret — never a plaintext file (P0-13).
+const KEYRING_SERVICE: &str = "Rocktier Sign";
+
+/// Keychain entry username for a given certificate's private key.
+fn keyring_user(name: &str) -> String {
+    format!("sign-key:{name}")
+}
+
+/// Unique suffix for throwaway temp-file names (pid + nanosecond clock).
+fn temp_suffix() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
 fn is_pdf_path(path: &Path) -> bool {
     if !path.is_file() {
         return false;
@@ -124,15 +142,53 @@ fn sign_pdf(
         return Err(format!("sign-engine not found at {engine:?}"));
     }
 
-    // Resolve key/cert: either from cert_id lookup or direct paths
+    // Resolve key/cert: either from cert_id lookup or direct paths.
+    // For cert_id the private key lives in the OS keychain (P0-13): pull it out
+    // to a throwaway temp file that is deleted before we return. Legacy installs
+    // that still have a plaintext .key on disk are migrated into the keychain.
+    let mut temp_key_guard: Option<std::path::PathBuf> = None;
     let (resolved_key, resolved_cert) = if let Some(id) = cert_id {
         let store = cert_store_dir(&app)?;
-        let k = store.join(format!("{id}.key"));
         let c = store.join(format!("{id}.crt"));
-        if !k.exists() || !c.exists() {
+        if !c.exists() {
             return Err(format!("cert '{id}' not found in store"));
         }
-        (k.to_string_lossy().into_owned(), c.to_string_lossy().into_owned())
+
+        let key_pem = match keyring::Entry::new(KEYRING_SERVICE, &keyring_user(&id)) {
+            Ok(entry) => entry.get_password().ok(),
+            Err(_) => None,
+        };
+
+        let key_pem = match key_pem {
+            Some(p) => p,
+            None => {
+                // Fallback: older installs stored a plaintext .key — migrate it.
+                let legacy = store.join(format!("{id}.key"));
+                if !legacy.exists() {
+                    return Err(format!(
+                        "private key for '{id}' is not in the system keychain. The keychain may \
+                         have been reset, or this certificate was created by an older version. \
+                         Please re-create the certificate."
+                    ));
+                }
+                let p = fs::read_to_string(&legacy)
+                    .map_err(|e| format!("read legacy key: {e}"))?;
+                if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(&id)) {
+                    let _ = entry.set_password(&p);
+                }
+                let _ = fs::remove_file(&legacy);
+                p
+            }
+        };
+
+        let tmp_key = std::env::temp_dir().join(format!(
+            "rocktier-sign-{}-{}",
+            std::process::id(),
+            temp_suffix()
+        ));
+        fs::write(&tmp_key, key_pem).map_err(|e| format!("write temp key: {e}"))?;
+        temp_key_guard = Some(tmp_key.clone());
+        (tmp_key.to_string_lossy().into_owned(), c.to_string_lossy().into_owned())
     } else {
         match (key_path, cert_path) {
             (Some(k), Some(c)) => (k, c),
@@ -180,6 +236,11 @@ fn sign_pdf(
     let output_result = cmd.output()
         .map_err(|e| format!("engine exec: {e}"))?;
 
+    // Best-effort: the transient private-key temp file must not linger.
+    if let Some(p) = &temp_key_guard {
+        let _ = fs::remove_file(p);
+    }
+
     if output_result.status.success() {
         Ok(String::from_utf8_lossy(&output_result.stdout).to_string())
     } else {
@@ -205,13 +266,20 @@ fn verify_pdf(
         .output()
         .map_err(|e| format!("engine exec: {e}"))?;
 
-    // A failed verify (nonzero exit) must not surface as Ok — "no conclusion"
-    // and "still working" must never look the same in the UI.
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Verification failed: {}", stderr.trim()));
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // The engine returns a non-zero exit code to separate "invalid signature"
+    // (red), "valid but untrusted / self-signed" (yellow) and "no signatures"
+    // from a clean pass. We forward its JSON in every case so the UI can colour
+    // the verdict instead of pretending every file verifies (P0-14).
+    if output.status.success() {
+        Ok(stdout)
+    } else if !stdout.trim().is_empty() {
+        Err(stdout)
+    } else {
+        Err(format!("Verification failed: {}", stderr.trim()))
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// Reject certificate names that could escape the cert store directory
@@ -243,33 +311,59 @@ fn generate_key(
 
     let name = sanitize_cert_name(&name)?;
     let store = cert_store_dir(&app)?;
-    let key_out = store.join(format!("{name}.key"));
     let cert_out = store.join(format!("{name}.crt"));
 
     // Overwriting silently destroys the old private key — every signature the
     // user made with it becomes unverifiable *by them*. Refuse instead.
-    if key_out.exists() || cert_out.exists() {
+    if cert_out.exists() {
         return Err(format!(
             "A certificate named \"{name}\" already exists. Choose a different name."
         ));
     }
 
+    // Generate into a temp dir, then keep *only* the public cert in the store.
+    // The private key goes into the OS secure store (macOS Keychain / Windows
+    // Credential Manager / libsecret) and is never persisted as a plaintext
+    // file (P0-13).
+    let tmp = std::env::temp_dir().join(format!(
+        "rocktier-sign-gen-{}-{}",
+        std::process::id(),
+        temp_suffix()
+    ));
+    fs::create_dir_all(&tmp).map_err(|e| format!("create temp: {e}"))?;
+    let key_tmp = tmp.join(format!("{name}.key"));
+    let cert_tmp = tmp.join(format!("{name}.crt"));
+
     let output_result = Command::new(&engine)
         .arg("generate-key")
         .arg("-name").arg(&name)
-        .arg("-key-out").arg(&key_out)
-        .arg("-cert-out").arg(&cert_out)
+        .arg("-key-out").arg(&key_tmp)
+        .arg("-cert-out").arg(&cert_tmp)
         .output()
         .map_err(|e| format!("engine exec: {e}"))?;
 
     if !output_result.status.success() {
+        let _ = fs::remove_dir_all(&tmp);
         return Err(String::from_utf8_lossy(&output_result.stderr).to_string());
     }
+
+    // Read the freshly generated private key and store it in the OS keychain.
+    let key_pem = fs::read_to_string(&key_tmp).map_err(|e| format!("read temp key: {e}"))?;
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(&name))
+        .map_err(|e| format!("keychain init: {e}"))?;
+    entry.set_password(&key_pem).map_err(|e| {
+        let _ = fs::remove_dir_all(&tmp);
+        format!("store private key in system keychain failed: {e}")
+    })?;
+
+    // Move the public cert into the store; the private key never lands on disk.
+    fs::copy(&cert_tmp, &cert_out).map_err(|e| format!("write cert: {e}"))?;
+    let _ = fs::remove_dir_all(&tmp);
 
     Ok(CertInfo {
         name: name.clone(),
         created: chrono::Local::now().to_rfc3339(),
-        path: key_out.to_string_lossy().into_owned(),
+        path: cert_out.to_string_lossy().into_owned(),
     })
 }
 
@@ -279,28 +373,28 @@ fn list_certs(app: tauri::AppHandle) -> Result<Vec<CertInfo>, String> {
     let store = cert_store_dir(&app)?;
     let mut certs: Vec<CertInfo> = Vec::new();
 
+    // A certificate is present iff its public .crt lives in the store; the
+    // private key is held in the OS keychain (P0-13), not as a .key file.
     if let Ok(entries) = fs::read_dir(&store) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("key") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    let crt = store.join(format!("{stem}.crt"));
-                    if crt.exists() {
-                        let created = entry
-                            .metadata()
-                            .and_then(|m| m.created())
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
-                            .map(|dt| dt.to_rfc3339())
-                            .unwrap_or_default();
-                        certs.push(CertInfo {
-                            name: stem.to_string(),
-                            created,
-                            path: path.to_string_lossy().into_owned(),
-                        });
-                    }
-                }
+            if path.extension().and_then(|e| e.to_str()) != Some("crt") {
+                continue;
+            }
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                let created = entry
+                    .metadata()
+                    .and_then(|m| m.created())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default();
+                certs.push(CertInfo {
+                    name: stem.to_string(),
+                    created,
+                    path: path.to_string_lossy().into_owned(),
+                });
             }
         }
     }
@@ -315,9 +409,8 @@ fn list_certs(app: tauri::AppHandle) -> Result<Vec<CertInfo>, String> {
 fn set_default_cert(app: tauri::AppHandle, name: String) -> Result<(), String> {
     let name = sanitize_cert_name(&name)?;
     let store = cert_store_dir(&app)?;
-    let key = store.join(format!("{name}.key"));
     let crt = store.join(format!("{name}.crt"));
-    if !key.exists() || !crt.exists() {
+    if !crt.exists() {
         return Err(format!("cert '{name}' not found"));
     }
 

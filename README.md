@@ -33,6 +33,18 @@ Privacy-first electronic signature tool for people who choose not to upload thei
 | Rocktier Sign standalone | $9.99 one-time |
 | Rocktier Family Bundle (6 apps) | $19.99 one-time |
 
+## Security — where your private key lives
+
+Your signing **private key is never written to disk as a plaintext file.** It is stored in the operating system's secure credential store:
+
+- **macOS** — the Keychain
+- **Windows** — the Credential Manager (DPAPI-backed)
+- **Linux** — the secret-service / libsecret backend
+
+The public certificate (`.crt`) is kept in the app data folder; the private key is only ever briefly materialised to a throwaway temp file while a signature is being computed, and that temp file is deleted immediately afterwards.
+
+Because the key lives inside the OS secure store, it is bound to your user account: a stolen disk image, a cloud/Time Machine backup, or another process on the same machine cannot read it without your OS login. Use full-disk encryption (FileVault / BitLocker) as an additional layer. If you reset your OS account password without migrating the keychain, the stored key becomes unrecoverable — re-create the certificate in that case.
+
 ## Development
 
 ```bash

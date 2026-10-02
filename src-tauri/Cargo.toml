@@ -21,6 +21,9 @@ tauri-plugin-updater = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
+# Private keys are stored in the OS secure store (macOS Keychain / Windows
+# Credential Manager / libsecret), never as a plaintext file on disk (P0-13).
+keyring = "3"
 
 [features]
 default = ["custom-protocol"]
