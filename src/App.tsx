@@ -36,6 +36,10 @@ function App() {
     try { localStorage.setItem(THEME_KEY, theme); } catch {}
   }, [theme]);
 
+  useEffect(() => {
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : lang;
+  }, [lang]);
+
   // Persist language choice (Batch 2 #10 fix)
   useEffect(() => {
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
