@@ -6,6 +6,22 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rocktier Sign</title>
+    <script>
+      // 三态主题必须在第一帧样式解析前定好：默认值是 auto（跟随系统），
+      // 若等 React 挂载再设，浅色系统上会先画一帧深色再跳变。
+      (function () {
+        try {
+          var saved = localStorage.getItem("rocktier.sign.theme");
+          var mode = saved === "light" || saved === "dark" || saved === "auto" ? saved : "auto";
+          document.documentElement.setAttribute("data-theme",
+            mode === "auto"
+              ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+              : mode);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

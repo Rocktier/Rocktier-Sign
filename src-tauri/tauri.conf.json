@@ -31,7 +31,26 @@
     "copyright": "Copyright 2026 Rocktier",
     "category": "Business",
     "shortDescription": "Offline PDF digital signature tool",
-    "longDescription": "Rocktier Sign - Sign documents on your machine, not someone else's server. Buy once, own forever."
+    "longDescription": "Rocktier Sign - Sign documents on your machine, not someone else's server. Buy once, own forever.",
+    "windows": {
+      "allowDowngrades": true,
+      "digestAlgorithm": "sha256",
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English"
+        ],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": "en-US",
+        "upgradeCode": "832BAE73-F9A6-5006-A80C-B5BBE0AC43BA"
+      }
+    }
   },
   "productName": "Rocktier Sign",
   "mainBinaryName": "RocktierSign",

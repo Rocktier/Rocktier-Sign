@@ -18,6 +18,10 @@ export const translations: Dict = {
   "nav.theme": { en: "Theme", zh: "主题" },
   "nav.theme.light": { en: "Switch to light mode", zh: "切换到浅色模式" },
   "nav.theme.dark": { en: "Switch to dark mode", zh: "切换到深色模式" },
+  // 三态档位名（按钮 title / aria-label 用；状态机 auto → light → dark）
+  "nav.theme.auto": { en: "Follow system", zh: "跟随系统" },
+  "nav.theme.lightMode": { en: "Light", zh: "浅色" },
+  "nav.theme.darkMode": { en: "Dark", zh: "深色" },
 
   // Sign page
   "sign.heading": { en: "Sign a PDF", zh: "签名 PDF" },

@@ -18,7 +18,12 @@ const NAV_PAGES: { id: Page; icon: React.ReactNode; labelKey: Parameters<typeof 
   { id: "cert", icon: <KeyIcon size={18} />, labelKey: "nav.cert" },
 ];
 
+/** 三态：auto 跟随系统 → light → dark → auto（家族 §6.5 唯一状态机）。 */
+type ThemeMode = "auto" | "light" | "dark";
+type Resolved = "light" | "dark";
+
 const THEME_KEY = "rocktier.sign.theme";
+const THEME_CYCLE: readonly ThemeMode[] = ["auto", "light", "dark"];
 const LANG_KEY = "rocktier.sign.lang";
 
 function App() {
@@ -30,9 +35,7 @@ function App() {
   // 原生菜单「打开…」的请求计数：传给 SignPage，在其 effect 里触发文件选择。
   // 用递增计数而非布尔/事件，保证菜单先于页面挂载发出时也不会丢（挂载时 >0 即触发）。
   const [signOpenRequest, setSignOpenRequest] = useState(0);
-  const [theme, setTheme] = useState<"dark" | "light">(
-    () => (localStorage.getItem(THEME_KEY) as "dark" | "light") ?? "dark"
-  );
+  const [theme, setTheme] = useState<ThemeMode>(readTheme);
   // 授权（家族 L6）：状态轮询 + 对话框开关。null = 尚未取到（或浏览器 dev）。
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [licenseOpen, setLicenseOpen] = useState(false);
@@ -42,8 +45,19 @@ function App() {
   }, [lang]);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", resolveTheme(theme));
     try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  }, [theme]);
+
+  // auto 态下系统外观变了要跟着变；light/dark 是用户明确选择，不动。
+  useEffect(() => {
+    if (theme !== "auto") return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => {
+      document.documentElement.setAttribute("data-theme", systemTheme());
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
   useEffect(() => {
@@ -56,7 +70,7 @@ function App() {
   }, [lang]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+    setTheme((prev) => THEME_CYCLE[(THEME_CYCLE.indexOf(prev) + 1) % THEME_CYCLE.length]);
   }, []);
 
   // ── License（家族 L6）：读一次试用状态；写操作（sign_pdf）被拦时由 Rust 发
@@ -172,13 +186,25 @@ function App() {
                 : t("license.trialChip", lang, { days: license.daysLeft })}
             </button>
           )}
+          {/* 家族唯一主题按钮：.icon-btn（28×28 + 40×40 命中区）。
+              三态 auto → light → dark，data-mode 驱动角标，title/aria-label 说明当前档。 */}
           <button
-            className="sidebar-theme-toggle"
+            className="icon-btn"
+            data-mode={theme}
             onClick={toggleTheme}
-            title={t(theme === "dark" ? "nav.theme.light" : "nav.theme.dark", lang)}
-            aria-label={t(theme === "dark" ? "nav.theme.light" : "nav.theme.dark", lang)}
+            title={`${t("nav.theme", lang)} \u00b7 ${t(theme === "auto" ? "nav.theme.auto" : theme === "light" ? "nav.theme.lightMode" : "nav.theme.darkMode", lang)}`}
+            aria-label={`${t("nav.theme", lang)}: ${t(theme === "auto" ? "nav.theme.auto" : theme === "light" ? "nav.theme.lightMode" : "nav.theme.darkMode", lang)}`}
           >
-            {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+            {theme === "auto" ? (
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2.5" y="4" width="19" height="13" rx="2" />
+                <path d="M8 20.5h8M12 17v3.5" />
+              </svg>
+            ) : theme === "dark" ? (
+              <SunIcon size={16} />
+            ) : (
+              <MoonIcon size={16} />
+            )}
           </button>
           <div className="lang-switch">
             <button className={`lang-btn${lang === "en" ? " active" : ""}`} onClick={() => setLang("en")}>EN</button>
@@ -201,3 +227,24 @@ function App() {
 }
 
 export default App;
+
+/** 读存储。三态引入前只存 dark/light —— 原样保留，老用户偏好不丢。 */
+function readTheme(): ThemeMode {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light" || saved === "auto") return saved;
+  } catch {
+    /* ignore */
+  }
+  // 从没手动选过：跟随系统（家族基线）
+  return "auto";
+}
+
+function systemTheme(): Resolved {
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+/** auto 落成实际生效值 —— data-theme 只接受 light/dark。 */
+function resolveTheme(mode: ThemeMode): Resolved {
+  return mode === "auto" ? systemTheme() : mode;
+}
