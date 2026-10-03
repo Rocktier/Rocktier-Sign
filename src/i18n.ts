@@ -84,6 +84,35 @@ export const translations: Dict = {
   "common.browse": { en: "Browse…", zh: "浏览…" },
   "common.loading": { en: "Working…", zh: "处理中…" },
   "common.noFile": { en: "No file selected", zh: "未选择文件" },
+
+  // License（家族 L6，见 components/LicenseDialog.tsx 与 src-tauri/src/license.rs）
+  "license.title": { en: "License", zh: "许可与激活" },
+  "license.loading": { en: "Checking…", zh: "正在检查…" },
+  "license.trialLeft": { en: "Free trial — {days} day(s) left.", zh: "免费试用中 —— 还剩 {days} 天。" },
+  "license.trialChip": { en: "Trial · {days}d", zh: "试用 {days} 天" },
+  "license.expiredChip": { en: "Not activated", zh: "未激活" },
+  "license.expired": {
+    en: "Your trial has ended. Verifying PDFs and managing certificates still work; signing needs a license.",
+    zh: "试用已结束。验证 PDF 与管理证书仍可用；签名需要许可。",
+  },
+  "license.licensed": { en: "Licensed. Thank you.", zh: "已激活。谢谢。" },
+  "license.licensedFamily": { en: "Licensed — family bundle. Every Rocktier app is unlocked.", zh: "已激活 —— 全家桶，所有 Rocktier 应用均已解锁。" },
+  "license.licensedNote": { en: "This copy is activated. No further checks, and no network access.", zh: "此副本已激活。此后不再有任何校验，也不联网。" },
+  "license.storeNote": { en: "This copy came from the Microsoft Store, so the Store handles the license for it.", zh: "此副本购自微软商店，许可由商店负责。" },
+  "license.notConfigured": { en: "This build cannot activate a code yet — it carries no verification key. Please write to hello@rocktier.com.", zh: "此构建尚未配置验签公钥，暂时无法激活。请写信到 hello@rocktier.com。" },
+  "license.codeLabel": { en: "Activation code", zh: "激活码" },
+  "license.codePlaceholder": { en: "RKT-…", zh: "RKT-…" },
+  "license.activate": { en: "Activate", zh: "激活" },
+  "license.activating": { en: "Activating…", zh: "正在激活…" },
+  // Sign 官网尚不可购（规程 B.9-2，ENFORCE=false）：不标价格，官网上架后再补。
+  "license.buy": { en: "Buy", zh: "购买" },
+  "license.close": { en: "Close", zh: "关闭" },
+  "license.invalid": { en: "That code was not accepted. Check it for a typo — the code is not case-sensitive.", zh: "该激活码未被接受。请检查是否输错（不区分大小写）。" },
+  "license.wrongProduct": { en: "That code belongs to a different Rocktier app. Each app has its own code — or the family bundle, which unlocks all of them.", zh: "这个激活码属于另一个 Rocktier 应用。每个应用各有自己的码，或者用全家桶（可解锁全部）。" },
+  "license.refunded": { en: "That code was refunded, so it no longer unlocks anything. If this is a mistake, write to hello@rocktier.com with your order number.", zh: "这个激活码对应的购买已退款，因此不能再解锁。如属误判，请把订单号发到 hello@rocktier.com。" },
+  "license.offline": { en: "Could not reach rocktier.com. Activating needs one connection; after that the app stays offline.", zh: "连不上 rocktier.com。激活需要一次联网，之后便不再联网。" },
+  "license.whereToFind": { en: "Your code was shown on the page right after payment, and is in the purchase email too.", zh: "付款后页面上会显示激活码，购买确认邮件里也有一份。" },
+  "license.privacyNote": { en: "Activating sends the code to rocktier.com once and stores the signed reply locally. Nothing else is sent.", zh: "激活会把激活码发送到 rocktier.com 一次，并把签名回执保存在本机。除此之外不传输任何内容。" },
 };
 
 export function t(key: string, lang: Lang, vars?: Record<string, string | number>): string {

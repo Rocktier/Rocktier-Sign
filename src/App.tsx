@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
+import { LicenseDialog } from "./components/LicenseDialog";
+import { licenseStatus, onLicenseExpired, type LicenseInfo } from "./services/license";
 import SignPage from "./pages/SignPage";
 import VerifyPage from "./pages/VerifyPage";
 import CertPage from "./pages/CertPage";
@@ -31,6 +33,9 @@ function App() {
   const [theme, setTheme] = useState<"dark" | "light">(
     () => (localStorage.getItem(THEME_KEY) as "dark" | "light") ?? "dark"
   );
+  // 授权（家族 L6）：状态轮询 + 对话框开关。null = 尚未取到（或浏览器 dev）。
+  const [license, setLicense] = useState<LicenseInfo | null>(null);
+  const [licenseOpen, setLicenseOpen] = useState(false);
 
   useEffect(() => {
     buildMenu(lang).catch(console.error);
@@ -54,6 +59,39 @@ function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
+  // ── License（家族 L6）：读一次试用状态；写操作（sign_pdf）被拦时由 Rust 发
+  //    license-expired 事件（命令层统一发），这里弹激活对话框并刷新状态。前端另有
+  //    兜底：SignPage 的 invoke 错误串含 LICENSE_EXPIRED 也开对话框（双保险）。──
+  const refreshLicense = useCallback(() => {
+    // 浏览器 dev（无 Tauri）没有 license_status：静默保持 null，胶囊不显示。
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    licenseStatus()
+      .then(setLicense)
+      .catch(() => setLicense(null));
+  }, []);
+
+  const openLicense = useCallback(() => {
+    setLicenseOpen(true);
+    refreshLicense();
+  }, [refreshLicense]);
+
+  useEffect(() => {
+    refreshLicense();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onLicenseExpired(() => {
+      setLicenseOpen(true);
+      refreshLicense();
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [refreshLicense]);
+
   // 原生菜单事件接线（Rust on_menu_event emit "menu-action"，此前前端无监听，
   // 菜单项点了没反应）。action 名以 lib.rs build_app_menu 实际注册的 id 为准。
   useEffect(() => {
@@ -68,6 +106,9 @@ function App() {
           break;
         case "toggle-theme":
           toggleTheme();
+          break;
+        case "license":
+          openLicense();
           break;
         case "website":
           void invoke("open_url", { url: "https://rocktier.com/" }).catch(() => {});
@@ -87,7 +128,7 @@ function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [toggleTheme]);
+  }, [toggleTheme, openLicense]);
 
   return (
     <div className="app-root">
@@ -113,6 +154,24 @@ function App() {
           ))}
         </div>
         <div className="sidebar-bottom">
+          {/* 授权胶囊（家族 L6）：只在直链版且尚未激活时提示 —— 商店版由商店收款，
+              已激活时不占侧栏（常驻入口在帮助菜单「许可与激活…」）。Sign 目前无商店包。 */}
+          {license && license.channel === "direct" && license.status !== "licensed" && (
+            <button
+              type="button"
+              className={`sidebar-license${license.status === "expired" ? " expired" : ""}`}
+              onClick={openLicense}
+              title={
+                license.status === "expired"
+                  ? t("license.expired", lang)
+                  : t("license.trialLeft", lang, { days: license.daysLeft })
+              }
+            >
+              {license.status === "expired"
+                ? t("license.expiredChip", lang)
+                : t("license.trialChip", lang, { days: license.daysLeft })}
+            </button>
+          )}
           <button
             className="sidebar-theme-toggle"
             onClick={toggleTheme}
@@ -129,10 +188,14 @@ function App() {
       </nav>
 
       <main className="page-container">
-        {page === "sign" && <SignPage lang={lang} openRequest={signOpenRequest} />}
+        {page === "sign" && <SignPage lang={lang} openRequest={signOpenRequest} onLicenseExpired={openLicense} />}
         {page === "verify" && <VerifyPage lang={lang} />}
         {page === "cert" && <CertPage lang={lang} />}
       </main>
+
+      {licenseOpen && (
+        <LicenseDialog lang={lang} info={license} onRefresh={refreshLicense} onClose={() => setLicenseOpen(false)} />
+      )}
     </div>
   );
 }

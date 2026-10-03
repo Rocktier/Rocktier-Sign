@@ -7,6 +7,146 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri_plugin_opener::OpenerExt;
 use tauri::{Emitter, Manager, WindowEvent};
 
+// 授权：试用状态与回执验签（单一来源 docs/rocktier/license.rs，规程 FAMILY-LICENSE.md）。
+// 写命令的拦截在下方 ensure_write_allowed（Sign 只拦 sign_pdf —— generate_key 绝对
+// 不拦：拦 = 到期连证书都建不了 = 死锁；verify/list/set_default 全是读或元数据操作，
+// 一律放行），界面在 LicenseDialog。
+pub mod license;
+
+/* ── 授权：试用与激活（见 license.rs 的模块说明）────────────────────── */
+
+/// 试用与授权状态的落盘目录。由 `setup()` 注入。
+///
+/// 用全局而不是给 sign_pdf 再加一个参数：那会让命令签名多一个与业务无关的参数。
+static LICENSE_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+pub fn init_license_dir(dir: std::path::PathBuf) {
+    let _ = LICENSE_DIR.set(dir);
+}
+
+/// 供闸门发事件用。setup 注入；即使没注入也照样能拦截，只是界面不会自动弹窗。
+static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub fn init_app_handle(app: tauri::AppHandle) {
+    let _ = APP_HANDLE.set(app);
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// 当前授权状态。
+///
+/// 目录未注入（setup 失败）时按"试用中、满额天数"处理 —— 失败方向刻意选**放行**：
+/// 一个取不到的目录不该变成一次锁死。
+fn current_license() -> crate::license::Status {
+    let Some(dir) = LICENSE_DIR.get() else {
+        return crate::license::Status::Trialing { days_left: crate::license::TRIAL_DAYS };
+    };
+    let now = now_secs();
+    let started = crate::license::ensure_started(dir, now);
+    // 只认本单品与全家桶的回执：别人的回执即使验签通过，也不是本应用的授权。
+    let receipt = crate::license::read_valid_receipt(dir, crate::license::PUBLIC_KEY_B64)
+        .filter(crate::license::accepts);
+    crate::license::status_from(started, receipt.as_ref(), now)
+}
+
+/// 写操作的统一闸门。
+///
+/// 在**命令层**拦，而不是在每个界面路径上判断：界面路径会随功能增长而增加，漏掉一条
+/// 就是一道缝；命令层是所有写操作的必经之路。Sign 产出新文件的命令只有 `sign_pdf`
+/// 一条。⚠️ `generate_key` **绝对不拦**：拦了 = 过期用户连自签名证书都建不了 =
+/// 连"激活后继续用"的最小路径都被堵死（FAMILY-LICENSE.md §2）。verify_pdf /
+/// list_certs / set_default_cert / get_default_cert 是读操作或元数据操作，一律放行。
+///
+/// 错误码固定为 `LICENSE_EXPIRED`，前端凭它弹购买/激活框。
+/// `ENFORCE=false` 期间（规程 B.9-2）本闸门只记账不拦截。
+fn ensure_write_allowed() -> Result<(), String> {
+    if current_license().allows_write(crate::license::enforced()) {
+        return Ok(());
+    }
+    // 让界面主动知道"被拦下了"，而不是在每个动作的 catch 里各判一次错误码 ——
+    // 那种写法漏掉一处，用户看到的就只是一个没有解释的失败。
+    if let Some(app) = APP_HANDLE.get() {
+        let _ = app.emit("license-expired", ());
+    }
+    Err("LICENSE_EXPIRED".to_string())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseInfo {
+    /// `trial` / `expired` / `licensed`。
+    pub status: String,
+    /// 仅 `trial` 时有意义。
+    pub days_left: i64,
+    /// 仅 `licensed` 时有值（`SG` 单品 / `FL` 全家桶）。
+    pub product: Option<String>,
+    /// 当前是否真的会拦截写操作（渠道 + 公钥 + 总开关三者决定）。
+    pub enforcing: bool,
+    /// `direct`（官网直链）/ `store`（微软商店）。
+    pub channel: String,
+    /// 本构建是否已配置验签公钥。
+    ///
+    /// 没配置时**任何人都激活不了**（回执必然验不过）。界面据此如实说明，而不是
+    /// 拿"激活码未被接受"去搪塞一位已经付过钱的用户。
+    pub activation_configured: bool,
+}
+
+fn license_info() -> LicenseInfo {
+    let status = current_license();
+    LicenseInfo {
+        status: status.as_str().to_string(),
+        days_left: match &status {
+            crate::license::Status::Trialing { days_left } => *days_left,
+            _ => 0,
+        },
+        product: match &status {
+            crate::license::Status::Licensed { product } => Some(product.clone()),
+            _ => None,
+        },
+        enforcing: crate::license::enforced(),
+        channel: crate::license::channel().to_string(),
+        activation_configured: !crate::license::PUBLIC_KEY_B64.trim().is_empty(),
+    }
+}
+
+/// 供界面展示：剩余试用天数 / 是否已激活 / 当前渠道。
+///
+/// ⚠️ 不能加 `pub`：Sign 的命令都定义在 crate 根（lib.rs），而 `#[tauri::command]` 对
+/// `pub` 命令会生成 `#[macro_export]`，宏被提升到 crate 根后与本地定义同名冲突
+/// （E0255，MD 模板验证发现的坑）。
+#[tauri::command]
+async fn license_status() -> Result<LicenseInfo, String> {
+    Ok(license_info())
+}
+
+/// 保存服务端签出的回执并立即验签。
+///
+/// 联网换回执的那一步在**前端**做（`fetch` 到 rocktier.com/api/activate），
+/// 为的是不引入 HTTP 客户端依赖；但**验签与落盘必须在这里** —— 前端拿到的只是一段
+/// 待验的字符串，能证明它有效与否的只有公钥。
+#[tauri::command]
+async fn store_receipt(signed: String) -> Result<LicenseInfo, String> {
+    let dir = LICENSE_DIR
+        .get()
+        .ok_or_else(|| "no app data directory".to_string())?;
+    let trimmed = signed.trim();
+    let receipt = crate::license::verify_receipt(trimmed, crate::license::PUBLIC_KEY_B64)?;
+
+    // 其它单品的码虽然签名有效，但**不属于**本应用 —— 而且不要落盘：落下去以后
+    // 会被当成有效回执读回来，等于自己给自己开后门。
+    if !crate::license::accepts(&receipt) {
+        return Err("LICENSE_WRONG_PRODUCT".to_string());
+    }
+
+    crate::license::save_receipt(dir, trimmed)?;
+    Ok(license_info())
+}
+
 /// Platform-specific sign-engine binary name.
 /// macOS bundles use no extension; Windows uses .exe.
 #[cfg(target_os = "macos")]
@@ -135,6 +275,10 @@ fn sign_pdf(
     image_path: Option<String>,
     position: Option<String>,
 ) -> Result<String, String> {
+    // 签名是 Sign 唯一"产出新文件"的写操作：受授权闸门保护（FAMILY-LICENSE.md §2）。
+    // ENFORCE=false 期间只记账不拦截；官网上架可购后翻 license::ENFORCE 即生效。
+    // ⚠️ generate_key 刻意不拦：过期用户必须仍能创建证书，否则激活后也无证可用。
+    ensure_write_allowed()?;
     let engine = engine_path(&app)?;
 
     if !engine.exists() {
@@ -505,7 +649,10 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
 
     let site_i = MenuItem::with_id(app, "website", l("官方网站", "Website"), true, None::<&str>)?;
     let mail_i = MenuItem::with_id(app, "feedback", l("反馈", "Feedback"), true, None::<&str>)?;
-    let help_menu = Submenu::with_items(app, l("帮助", "Help"), true, &[&site_i, &mail_i])?;
+    // 购买页面上写着"打开应用 → 帮助 → License → 输入激活码"，所以应用里必须真有一个
+    // 能到那儿的常驻入口（侧栏授权胶囊在已激活/商店版下会隐藏，这里是兜底入口）。
+    let license_i = MenuItem::with_id(app, "license", l("许可与激活…", "License…"), true, None::<&str>)?;
+    let help_menu = Submenu::with_items(app, l("帮助", "Help"), true, &[&license_i, &site_i, &mail_i])?;
 
     let menu = Menu::with_items(
         app,
@@ -539,6 +686,12 @@ pub fn run() {
         .setup(|app| {
             app.manage(Ready(AtomicBool::new(false)));
             app.manage(InitialFile(Mutex::new(file_from_args())));
+            // 授权状态的落盘目录。取不到就留空，current_license() 会按"不拦截"处理
+            // —— 宁可少拦一次，也不能因为一个目录取不到把用户锁在外面（与 PDF/MD 同款）。
+            if let Ok(dir) = app.path().app_data_dir() {
+                init_license_dir(dir);
+            }
+            init_app_handle(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -553,6 +706,8 @@ pub fn run() {
             get_default_cert,
             build_menu,
             open_url,
+            license_status,
+            store_receipt,
         ])
         .on_menu_event(|app, event| {
             if event.id().0.as_str() == "quit" {
@@ -599,4 +754,60 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 验收（FAMILY-LICENSE.md §6 / B-P4）：试用过期后 `current_license()` 必须**记账**
+    /// 为 Expired（记账与 ENFORCE 无关）；闸门行为随总开关走 —— ENFORCE=true（官网
+    /// 上架可购后翻开关）时必须拦并返回固定错误码 LICENSE_EXPIRED；ENFORCE=false
+    /// （当前线上状态，规程 B.9-2）时只记账不拦截。
+    /// 构造法照 license.rs 既有测试：直接往状态目录里写起始时间戳。
+    #[test]
+    fn an_expired_trial_is_recorded_and_the_gate_tracks_enforce() {
+        let dir = std::env::temp_dir().join(format!("rt-sign-license-gate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // LICENSE_DIR 是进程级单例：本测试是唯一设置它的测试。若将来有人加第二条，
+        // 后到的 set 会失败 —— 那时合并两条测试，不要让闸门测试静默跑偏。
+        if LICENSE_DIR.set(dir.clone()).is_err() {
+            panic!("LICENSE_DIR 已被其他测试设置，闸门测试无法控制状态目录");
+        }
+
+        // 试用期第一天：无论开关，写操作都放行，状态记账为 Trialing。
+        let now = now_secs();
+        // 文件名即 license.rs 的 STATE_FILE（模块私有常量，这里按值写）。
+        std::fs::write(dir.join("state.bin"), now.to_string()).unwrap();
+        assert_eq!(ensure_write_allowed(), Ok(()), "试用期内写操作必须放行");
+        assert!(
+            matches!(current_license(), crate::license::Status::Trialing { .. }),
+            "试用状态应记账为 Trialing"
+        );
+
+        // 把试用起始时间改到 30 天前：记账必须判 Expired（与 ENFORCE 无关）。
+        std::fs::write(dir.join("state.bin"), (now - 30 * 86_400).to_string()).unwrap();
+        assert!(
+            matches!(current_license(), crate::license::Status::Expired),
+            "过期状态应记账为 Expired —— ENFORCE=false 也要记账，翻开关前状态可查"
+        );
+
+        // 闸门行为随总开关：ENFORCE=false 时放行（只记账）；翻 true 后必须拦。
+        if crate::license::enforced() {
+            let err = ensure_write_allowed().unwrap_err();
+            assert!(
+                err.contains("LICENSE_EXPIRED"),
+                "过期后写操作应返回 LICENSE_EXPIRED，实际为 {err}"
+            );
+        } else {
+            assert_eq!(
+                ensure_write_allowed(),
+                Ok(()),
+                "ENFORCE=false（规程 B.9-2）只记账不拦截；官网上架可购后改 true，本分支即变为拦截断言"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

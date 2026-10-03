@@ -23,6 +23,10 @@ chrono = "0.4"
 # Private keys are stored in the OS secure store (macOS Keychain / Windows
 # Credential Manager / libsecret), never as a plaintext file on disk (P0-13).
 keyring = "3"
+# 授权回执的 Ed25519 离线验签（license.rs，FAMILY-LICENSE.md §2）
+ed25519-dalek = "2"
+# 回执 payload 的 base64 编解码（license.rs）
+base64 = "0.22"
 
 [features]
 default = ["custom-protocol"]

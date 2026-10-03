@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { t, type Lang } from "../i18n";
+import { isLicenseExpiredError } from "../services/license";
 import type { CertInfo } from "../types";
 
 interface Props {
   lang: Lang;
   /** 原生菜单「打开…」请求计数：>0 时触发文件选择（递增即再次触发） */
   openRequest?: number;
+  /** 签名被授权闸门拦下（LICENSE_EXPIRED）时打开许可对话框（家族 L6）。 */
+  onLicenseExpired?: () => void;
 }
 
-export default function SignPage({ lang, openRequest = 0 }: Props) {
+export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Props) {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [certId, setCertId] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
@@ -92,7 +95,10 @@ export default function SignPage({ lang, openRequest = 0 }: Props) {
       });
       setResult({ ok: true, msg: `${t("sign.success", lang)}\n${out}` });
     } catch (e) {
-      setResult({ ok: false, msg: `${t("sign.error", lang)}: ${e}` });
+      // 事件链（license-expired）已弹对话框；这里兜错误串，防事件丢失时只剩裸失败。
+      // ENFORCE=false 期间闸门不拦，此分支在官网上架可购后（翻 license::ENFORCE）生效。
+      if (onLicenseExpired && isLicenseExpiredError(e)) onLicenseExpired();
+      else setResult({ ok: false, msg: `${t("sign.error", lang)}: ${e}` });
     }
     setBusy(false);
   };
