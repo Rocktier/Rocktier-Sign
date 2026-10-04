@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { t, type Lang } from "../i18n";
+import { localizeError } from "../services/errorText";
 import type { CertInfo } from "../types";
 
 interface Props {
@@ -43,7 +44,7 @@ export default function CertPage({ lang }: Props) {
       // Rust 侧 generate_key 拒绝同名证书（静默覆盖会毁掉旧私钥）。
       // 此前端 window.confirm 问一遍「是否覆盖」再被 Rust 拒绝，是死路——
       // 现直接把 Rust 的错误信息（含「换一个名字」提示）原样展示出来。
-      setError(`${t("cert.error", lang)}: ${e}`);
+      setError(`${t("cert.error", lang)}: ${localizeError(String(e), lang)}`);
     }
     setBusy(false);
   };
@@ -53,7 +54,7 @@ export default function CertPage({ lang }: Props) {
       await invoke("set_default_cert", { name });
       setDefaultCert(name);
     } catch (e) {
-      setError(`${e}`);
+      setError(localizeError(String(e), lang));
     }
   };
 

@@ -82,6 +82,12 @@ export const translations: Dict = {
   "cert.created": { en: "Created", zh: "创建时间" },
   "cert.signCount": { en: "{n} signatures", zh: "已签 {n} 份" },
   "cert.error": { en: "Certificate generation failed", zh: "证书生成失败" },
+  // Rust 拒绝同名证书（静默覆盖会毁掉旧私钥）。原文 "Invalid certificate name"
+  // 直译成「证书名无效」会误导 —— 用户以为名字格式不对，实际是「已存在」。
+  "cert.errorNameTaken": {
+    en: "A certificate with this name already exists. Pick another name to keep the existing key.",
+    zh: "已存在同名证书。换一个名字，以免覆盖现有的密钥。",
+  },
 
   // Common
   "common.cancel": { en: "Cancel", zh: "取消" },
