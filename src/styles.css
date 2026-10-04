@@ -139,11 +139,6 @@ button {
   font-family: inherit;
 }
 
-@keyframes dotpulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
 .dot-matrix {
   background-image: radial-gradient(var(--dot) 1px, transparent 1.6px);
   background-size: 22px 22px;
@@ -194,11 +189,11 @@ button {
 }
 
 .brand-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--red);
-  animation: dotpulse 3s ease-in-out infinite;
+  animation: dotpulse 3s var(--ease) infinite;
   flex-shrink: 0;
 }
 
