@@ -34,7 +34,7 @@
   --dot: rgba(255, 255, 255, 0.55);
   --danger: rgba(255, 74, 61, 0.9);
   --success: rgba(48, 209, 88, 0.9);
-  --warning: rgba(255, 191, 64, 0.95);
+  --warning: #cc3a30;
   --shadow: rgba(0, 0, 0, 0.4);
   --scrollbar: rgba(255, 255, 255, 0.1);
   --scrollbar-hover: rgba(255, 255, 255, 0.2);
@@ -70,8 +70,8 @@
   --red: #e64537;
   --dot: rgba(0, 0, 0, 0.55);
   --danger: rgba(230, 69, 55, 0.9);
-  --success: rgba(34, 178, 77, 0.9);
-  --warning: rgba(191, 134, 0, 0.95);
+  --success: #1c7f46;
+  --warning: #c0392b;
 }
 
 *, *::before, *::after {
