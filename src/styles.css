@@ -366,7 +366,6 @@ button {
   color: var(--text-primary);
   font-family: var(--font);
   font-size: var(--fs-lg);
-  outline: none;
 }
 
 .form-input:focus,
@@ -821,7 +820,6 @@ button {
   font-family: var(--font);
   font-size: 13px;
   color: var(--text-primary);
-  outline: none;
 }
 .license-field input:focus { border-color: var(--red); }
 
