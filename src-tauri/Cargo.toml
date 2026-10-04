@@ -1,6 +1,6 @@
 [package]
 name = "rocktier-sign"
-version = "0.1.3"
+version = "0.1.4"
 description = "Sign documents on your machine, not someone else's server."
 authors = ["Rocktier"]
 edition = "2021"
