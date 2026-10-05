@@ -29,7 +29,7 @@
   --accent-glow: rgba(255, 255, 255, 0.15);
   --red: #ff4a3d;
   --dot: rgba(255, 255, 255, 0.55);
-  --success: rgba(48, 209, 88, 0.9);
+  --success: #ffffff;
   --warning: #cc3a30;
   --shadow: rgba(0, 0, 0, 0.4);
   --scrollbar: rgba(255, 255, 255, 0.1);
@@ -56,7 +56,7 @@
   --on-accent: #ffffff;
   --red: #e64537;
   --dot: rgba(0, 0, 0, 0.55);
-  --success: #1c7f46;
+  --success: #000000;
   --warning: #c0392b;
 }
 
