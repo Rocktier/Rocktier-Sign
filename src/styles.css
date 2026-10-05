@@ -22,9 +22,6 @@
   --bg-secondary: #0a0a0a;
   --bg-card: rgba(255, 255, 255, 0.03);
   --bg-card-hover: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(255, 255, 255, 0.10);
-  --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.72);
   --text-tertiary: rgba(255, 255, 255, 0.58);
   --accent: #ffffff;
@@ -32,7 +29,6 @@
   --accent-glow: rgba(255, 255, 255, 0.15);
   --red: #ff4a3d;
   --dot: rgba(255, 255, 255, 0.55);
-  --danger: rgba(255, 74, 61, 0.9);
   --success: rgba(48, 209, 88, 0.9);
   --warning: #cc3a30;
   --shadow: rgba(0, 0, 0, 0.4);
@@ -50,26 +46,16 @@
 }
 
 [data-theme="light"] {
-  /* 深色语义令牌必须在浅色里重写：否则滚动条/选中高亮是白色，压在白底上等于隐形 */
-  --accent-glow: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(0, 0, 0, 0.12);
-  --scrollbar: rgba(0, 0, 0, 0.18);
-  --scrollbar-hover: rgba(0, 0, 0, 0.32);
-  --selection: rgba(0, 0, 0, 0.14);
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
   --bg-card: rgba(0, 0, 0, 0.03);
   --bg-card-hover: rgba(0, 0, 0, 0.06);
-  --border: rgba(0, 0, 0, 0.06);
-  --border-hover: rgba(0, 0, 0, 0.10);
-  --text-primary: #000000;
   --text-secondary: rgba(0, 0, 0, 0.64);
   --text-tertiary: rgba(0, 0, 0, 0.6);
   --accent: #000000;
   --on-accent: #ffffff;
   --red: #e64537;
   --dot: rgba(0, 0, 0, 0.55);
-  --danger: rgba(230, 69, 55, 0.9);
   --success: #1c7f46;
   --warning: #c0392b;
 }
