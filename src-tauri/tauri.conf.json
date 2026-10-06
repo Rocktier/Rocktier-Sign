@@ -54,7 +54,7 @@
   },
   "productName": "Rocktier Sign",
   "mainBinaryName": "RocktierSign",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "identifier": "Rocktier.RocktierSign",
   "app": {
     "windows": [
