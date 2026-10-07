@@ -11,6 +11,15 @@ use tauri::{Emitter, Manager, WindowEvent};
 // 写命令的拦截在下方 ensure_write_allowed（Sign 只拦 sign_pdf —— generate_key 绝对
 // 不拦：拦 = 到期连证书都建不了 = 死锁；verify/list/set_default 全是读或元数据操作，
 // 一律放行），界面在 LicenseDialog。
+/// 家族内唯一的产品标识，用作试用记录的副存储命名空间。
+///
+/// 必须与 `tauri.conf.json` 的 `bundle.identifier` 逐字一致 ——
+/// 副存储按它分文件，改了会导致老用户的试用记录读不到（等于白送 7 天）。
+/// 改动时两处必须同步。
+pub const APP_KEY: &str = "Rocktier.RocktierSign";
+
+pub mod license;
+pub mod trial;
 pub mod license;
 
 /* ── 授权：试用与激活（见 license.rs 的模块说明）────────────────────── */
@@ -47,11 +56,19 @@ fn current_license() -> crate::license::Status {
         return crate::license::Status::Trialing { days_left: crate::license::TRIAL_DAYS };
     };
     let now = now_secs();
-    let started = crate::license::ensure_started(dir, now);
+    let started = /* 试用起点双写（AppData + 副存储）并按机器指纹判定，
+       见 trial.rs 的模块说明。app_key 用 bundle identifier ——
+       家族内唯一，避免两个产品的副存储互相覆盖。 */
+    let started = crate::trial::ensure_started(
+        dir,
+        crate::APP_KEY,
+        now,
+        &crate::trial::machine_fingerprint(),
+    );;
     // 只认本单品与全家桶的回执：别人的回执即使验签通过，也不是本应用的授权。
     let receipt = crate::license::read_valid_receipt(dir, crate::license::PUBLIC_KEY_B64)
         .filter(crate::license::accepts);
-    crate::license::status_from(started, receipt.as_ref(), now)
+    crate::license::status_from(Some(started), receipt.as_ref(), now)
 }
 
 /// 写操作的统一闸门。
