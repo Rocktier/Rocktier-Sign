@@ -579,9 +579,90 @@ fn get_default_cert(app: tauri::AppHandle) -> Result<Option<String>, String> {
 }
 
 /// Build the native application menu (family standard).
+/// Menu labels for one language.
+///
+/// Same approach as PDF's and CAD's `menu.rs`: a struct per language instead
+/// of widening the old `l(zh, en)` closure to eight arguments — with eight
+/// positional string arguments, swapping `ja` and `ko` compiles cleanly and
+/// silently shows the wrong language.
+///
+/// Unknown codes fall back to English rather than panicking, so a stale
+/// `localStorage` value degrades to a usable menu.
+struct MenuStrings {
+    open: &'static str,
+    file: &'static str,
+    edit: &'static str,
+    view: &'static str,
+    window: &'static str,
+    help: &'static str,
+    toggle_theme: &'static str,
+    quit: &'static str,
+    website: &'static str,
+    feedback: &'static str,
+    about: &'static str,
+    license: &'static str,
+}
+
+impl MenuStrings {
+    fn for_lang(lang: &str) -> Self {
+        // Primary subtag, so "zh-CN" and "zh-Hans" both land on zh.
+        let code = lang.split(['-', '_']).next().unwrap_or("");
+        match code {
+            "zh" => Self {
+                open: "打开…", file: "文件", edit: "编辑", view: "显示", window: "窗口",
+                help: "帮助", toggle_theme: "切换日夜模式", quit: "退出",
+                website: "官方网站", feedback: "反馈",
+                about: "关于 Rocktier Sign", license: "许可与激活…",
+            },
+            "ja" => Self {
+                open: "開く…", file: "ファイル", edit: "編集", view: "表示", window: "ウインドウ",
+                help: "ヘルプ", toggle_theme: "テーマを切り替え", quit: "終了",
+                website: "公式サイト", feedback: "フィードバック",
+                about: "Rocktier Sign について", license: "ライセンス…",
+            },
+            "ko" => Self {
+                open: "열기…", file: "파일", edit: "편집", view: "보기", window: "창",
+                help: "도움말", toggle_theme: "테마 전환", quit: "종료",
+                website: "공식 웹사이트", feedback: "피드백",
+                about: "Rocktier Sign 정보", license: "라이선스…",
+            },
+            "de" => Self {
+                open: "Öffnen…", file: "Datei", edit: "Bearbeiten", view: "Ansicht", window: "Fenster",
+                help: "Hilfe", toggle_theme: "Design wechseln", quit: "Beenden",
+                website: "Website", feedback: "Feedback",
+                about: "Über Rocktier Sign", license: "Lizenz…",
+            },
+            "es" => Self {
+                open: "Abrir…", file: "Archivo", edit: "Editar", view: "Ver", window: "Ventana",
+                help: "Ayuda", toggle_theme: "Cambiar tema", quit: "Salir",
+                website: "Sitio web", feedback: "Comentarios",
+                about: "Acerca de Rocktier Sign", license: "Licencia…",
+            },
+            "pt" => Self {
+                open: "Abrir…", file: "Arquivo", edit: "Editar", view: "Exibir", window: "Janela",
+                help: "Ajuda", toggle_theme: "Alternar tema", quit: "Sair",
+                website: "Site", feedback: "Comentários",
+                about: "Sobre o Rocktier Sign", license: "Licença…",
+            },
+            "ar" => Self {
+                open: "فتح…", file: "ملف", edit: "تحرير", view: "عرض", window: "نافذة",
+                help: "مساعدة", toggle_theme: "تبديل المظهر", quit: "إنهاء",
+                website: "الموقع", feedback: "ملاحظات",
+                about: "حول Rocktier Sign", license: "الترخيص…",
+            },
+            // English is both the family default and the fallback.
+            _ => Self {
+                open: "Open…", file: "File", edit: "Edit", view: "View", window: "Window",
+                help: "Help", toggle_theme: "Toggle Theme", quit: "Quit",
+                website: "Website", feedback: "Feedback",
+                about: "About Rocktier Sign", license: "License…",
+            },
+        }
+    }
+}
+
 fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
-    let zh = lang.starts_with("zh");
-    let l = |zhv: &'static str, en: &'static str| if zh { zhv } else { en };
+    let m = MenuStrings::for_lang(lang);
 
     let app_menu = Submenu::with_items(
         app,
@@ -590,7 +671,7 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
         &[
             &PredefinedMenuItem::about(
                 app,
-                Some(l("关于 Rocktier Sign", "About Rocktier Sign")),
+                Some(m.about),
                                 Some(AboutMetadata {
                     version: Some(env!("CARGO_PKG_VERSION").to_string()),
                     copyright: Some("Copyright 2026 Rocktier".to_string()),
@@ -601,14 +682,14 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
             &PredefinedMenuItem::hide(app, None)?,
             &PredefinedMenuItem::hide_others(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "quit", l("退出", "Quit"), true, Some("CmdOrCtrl+Q"))?,
+            &MenuItem::with_id(app, "quit", m.quit, true, Some("CmdOrCtrl+Q"))?,
         ],
     )?;
 
-    let open_i = MenuItem::with_id(app, "open", l("打开…", "Open…"), true, Some("CmdOrCtrl+O"))?;
+    let open_i = MenuItem::with_id(app, "open", m.open, true, Some("CmdOrCtrl+O"))?;
     let file_menu = Submenu::with_items(
         app,
-        l("文件", "File"),
+        m.file,
         true,
         &[
             &open_i,
@@ -619,7 +700,7 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
 
     let edit_menu = Submenu::with_items(
         app,
-        l("编辑", "Edit"),
+        m.edit,
         true,
         &[
             &PredefinedMenuItem::undo(app, None)?,
@@ -632,17 +713,17 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
         ],
     )?;
 
-    let theme_i = MenuItem::with_id(app, "toggle-theme", l("切换日夜模式", "Toggle Theme"), true, None::<&str>)?;
+    let theme_i = MenuItem::with_id(app, "toggle-theme", m.toggle_theme, true, None::<&str>)?;
     let view_menu = Submenu::with_items(
         app,
-        l("显示", "View"),
+        m.view,
         true,
         &[&theme_i],
     )?;
 
     let window_menu = Submenu::with_items(
         app,
-        l("窗口", "Window"),
+        m.window,
         true,
         &[
             &PredefinedMenuItem::minimize(app, None)?,
@@ -651,12 +732,12 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
         ],
     )?;
 
-    let site_i = MenuItem::with_id(app, "website", l("官方网站", "Website"), true, None::<&str>)?;
-    let mail_i = MenuItem::with_id(app, "feedback", l("反馈", "Feedback"), true, None::<&str>)?;
+    let site_i = MenuItem::with_id(app, "website", m.website, true, None::<&str>)?;
+    let mail_i = MenuItem::with_id(app, "feedback", m.feedback, true, None::<&str>)?;
     // 购买页面上写着"打开应用 → 帮助 → License → 输入激活码"，所以应用里必须真有一个
     // 能到那儿的常驻入口（侧栏授权胶囊在已激活/商店版下会隐藏，这里是兜底入口）。
-    let license_i = MenuItem::with_id(app, "license", l("许可与激活…", "License…"), true, None::<&str>)?;
-    let help_menu = Submenu::with_items(app, l("帮助", "Help"), true, &[&license_i, &site_i, &mail_i])?;
+    let license_i = MenuItem::with_id(app, "license", m.license, true, None::<&str>)?;
+    let help_menu = Submenu::with_items(app, m.help, true, &[&license_i, &site_i, &mail_i])?;
 
     let menu = Menu::with_items(
         app,
