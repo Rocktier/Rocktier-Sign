@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { buildMenu, t, type Lang } from "./i18n";
+import { LOCALES, buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
 import { LicenseDialog } from "./components/LicenseDialog";
@@ -207,8 +207,17 @@ function App() {
             )}
           </button>
           <div className="lang-switch">
-            <button className={`lang-btn${lang === "en" ? " active" : ""}`} onClick={() => setLang("en")}>EN</button>
-            <button className={`lang-btn${lang === "zh" ? " active" : ""}`} onClick={() => setLang("zh")}>中文</button>
+            <select
+              className="lang-btn"
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Lang)}
+              aria-label={t("app.title", lang)}
+              title={t("app.title", lang)}
+            >
+              {LOCALES.map((l) => (
+                <option key={l.code} value={l.code}>{l.endonym}</option>
+              ))}
+            </select>
           </div>
         </div>
       </nav>
