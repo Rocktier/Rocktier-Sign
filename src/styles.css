@@ -45,6 +45,12 @@
 }
 
 [data-theme="light"] {
+  --accent-glow: rgba(0, 0, 0, 0.12);
+  --shadow: rgba(0, 0, 0, 0.08);
+  --scrollbar: rgba(0, 0, 0, 0.15);
+  --scrollbar-hover: rgba(0, 0, 0, 0.25);
+  --selection: rgba(0, 0, 0, 0.12);
+
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
   --bg-card: rgba(0, 0, 0, 0.03);
