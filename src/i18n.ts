@@ -4,16 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 /* 家族标准语言表 —— 单一真源，与 PDF/CAD 同构。 */
 export const LOCALES = [
   { code: "en", endonym: "English" },
-  { code: "zh", endonym: "中文" },
-  { code: "ja", endonym: "日本語" },
-  { code: "ko", endonym: "한국어" },
-  { code: "de", endonym: "Deutsch" },
-  { code: "es", endonym: "Español" },
-  { code: "pt", endonym: "Português" },
-  { code: "ar", endonym: "العربية" },
+    { code: "zh", endonym: "中文" }
 ] as const;
 
-export type Lang = "en" | "zh" | "ja" | "ko" | "de" | "es" | "pt" | "ar";
+export type Lang = "en" | "zh";
 
 type Dict = Record<string, { en: string; zh: string; ja: string; ko: string; de: string; es: string; pt: string; ar: string }>;
 
