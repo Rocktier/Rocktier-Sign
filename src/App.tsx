@@ -153,6 +153,7 @@ function App() {
           <div className="sidebar-brand">
             <SignBadge size={32} />
             <span className="brand-name">{t("app.title", lang)}</span>
+            <span className="brand-dot" aria-hidden="true" />
           </div>
         </div>
         <div className="sidebar-nav">
