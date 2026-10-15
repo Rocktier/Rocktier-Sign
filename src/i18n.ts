@@ -19,10 +19,6 @@ export const translations: Dict = {
     en: "Rocktier Sign",
     zh: "Rocktier Sign",
   },
-  "app.tagline": {
-    en: "Sign documents on your machine, not someone else's server.\\\\nBuy once, own forever.",
-    zh: "在你的设备上签名文件，而不是别人的服务器。\\\\n一次购买，永久使用。",
-  },
   "nav.sign": {
     en: "Sign",
     zh: "签名",
@@ -71,9 +67,17 @@ export const translations: Dict = {
     en: "Select PDF file",
     zh: "选择 PDF 文件",
   },
-  "selectPdf.help": {
-    en: "Choose the PDF you want to digitally sign.",
-    zh: "选择要添加数字签名的 PDF 文件。",
+  "sign.clearPdf": {
+    en: "Clear the selected PDF",
+    zh: "清除已选的 PDF",
+  },
+  "sign.removeStamp": {
+    en: "Remove the stamp image",
+    zh: "移除签章图片",
+  },
+  "sign.copyPath": {
+    en: "Copy path",
+    zh: "复制路径",
   },
   "sign.chooseCert": {
     en: "Choose certificate",
@@ -163,6 +167,44 @@ export const translations: Dict = {
     en: "Select signed PDF",
     zh: "选择已签名的 PDF",
   },
+  "verify.clearPdf": {
+    en: "Clear the selected PDF",
+    zh: "清除已选的 PDF",
+  },
+  /* 验证报告里的每一行都必须是用户母语 —— 这是「验证」这件事的全部产出，
+     此前整份报告是硬编码英文（Copy / Issuer trusted / INVALID …），
+     中文用户看到的是中英混排的判决书。 */
+  "verify.check.integrity": {
+    en: "Signature integrity",
+    zh: "签名完整性",
+  },
+  "verify.check.issuer": {
+    en: "Issuer trusted",
+    zh: "签发者受信",
+  },
+  "verify.check.keyUsage": {
+    en: "Key usage valid",
+    zh: "密钥用法有效",
+  },
+  "verify.check.revoked": {
+    en: "Revoked",
+    zh: "已被吊销",
+  },
+  "verify.val.yes": { en: "yes", zh: "是" },
+  "verify.val.no": { en: "no", zh: "否" },
+  "verify.val.valid": { en: "valid", zh: "有效" },
+  "verify.val.invalid": {
+    en: "INVALID — document altered?",
+    zh: "无效 —— 文档可能已被篡改",
+  },
+  "verify.val.untrusted": {
+    en: "no (self-signed / untrusted chain)",
+    zh: "否（自签名 / 证书链不受信）",
+  },
+  "verify.signer.unnamed": {
+    en: "(unnamed)",
+    zh: "（未署名）",
+  },
   "verify.selectPdf.help": {
     en: "Pick the signed PDF you want to check.",
     zh: "选择要核验的已签名 PDF。",
@@ -203,10 +245,6 @@ export const translations: Dict = {
     en: "A certificate is a digital identity used to sign PDF documents. Generate one here and it will be stored locally. You can create multiple certificates for different purposes and set one as the default for new signatures.",
     zh: "证书是用于签署 PDF 文件的数字身份。在此生成后将本地存储。你可以创建多个用途不同的证书，并指定其中一个作为新签名的默认证书。",
   },
-  "cert.nameLabel": {
-    en: "Certificate name",
-    zh: "证书名称",
-  },
   "cert.namePlaceholder": {
     en: "e.g. Personal, Work, Client A",
     zh: "如：个人、工作、客户 A",
@@ -231,10 +269,6 @@ export const translations: Dict = {
     en: "Created",
     zh: "创建时间",
   },
-  "cert.signCount": {
-    en: "{n} signatures",
-    zh: "已签 {n} 份",
-  },
   "cert.error": {
     en: "Certificate generation failed",
     zh: "证书生成失败",
@@ -242,10 +276,6 @@ export const translations: Dict = {
   "cert.errorNameTaken": {
     en: "A certificate with this name already exists. Pick another name to keep the existing key.",
     zh: "已存在同名证书。换一个名字，以免覆盖现有的密钥。",
-  },
-  "common.cancel": {
-    en: "Cancel",
-    zh: "取消",
   },
   "common.browse": {
     en: "Browse…",
@@ -255,9 +285,22 @@ export const translations: Dict = {
     en: "Working…",
     zh: "处理中…",
   },
-  "common.noFile": {
-    en: "No file selected",
-    zh: "未选择文件",
+  "common.copy": { en: "Copy", zh: "复制" },
+  "common.copied": { en: "Copied", zh: "已复制" },
+  "common.clear": { en: "Clear", zh: "清除" },
+  /* 窗口级拖放提示。文案要写成「松手会发生什么」，不是「支持拖放」——
+     用户此刻手还按着鼠标，需要确认的是后果，不是功能。 */
+  "drop.sign": {
+    en: "Drop to sign this PDF",
+    zh: "松开即签名这份 PDF",
+  },
+  "drop.sign.sub": {
+    en: "A PNG or JPG becomes the stamp image",
+    zh: "拖入 PNG 或 JPG 则作为签章图片",
+  },
+  "drop.verify": {
+    en: "Drop to verify this PDF",
+    zh: "松开即验证这份 PDF",
   },
   "license.title": {
     en: "License",

@@ -2,17 +2,20 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { t, type Lang } from "../i18n";
 import { isLicenseExpiredError } from "../services/license";
+import type { DropRequest } from "../services/dropFiles";
 import type { CertInfo } from "../types";
 
 interface Props {
   lang: Lang;
   /** 原生菜单「打开…」请求计数：>0 时触发文件选择（递增即再次触发） */
   openRequest?: number;
+  /** 窗口拖放落点（PDF → 待签文件；stamp → 签章图片）。id 递增即再触发一次。 */
+  drop?: DropRequest | null;
   /** 签名被授权闸门拦下（LICENSE_EXPIRED）时打开许可对话框（家族 L6）。 */
   onLicenseExpired?: () => void;
 }
 
-export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Props) {
+export default function SignPage({ lang, openRequest = 0, drop = null, onLicenseExpired }: Props) {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [certId, setCertId] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
@@ -23,6 +26,7 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
   const [visualSig, setVisualSig] = useState(true);
   const [sigPosition, setSigPosition] = useState("bottom-right");
   const [sigImagePath, setSigImagePath] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadCerts = async () => {
     try {
@@ -47,6 +51,33 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
+  // 拖放落点。和「打开…」一样用 id 递增触发，同一份文件连拖两次各算一次。
+  useEffect(() => {
+    if (!drop) return;
+    if (drop.kind === "pdf") toPdf(drop.path);
+    else toStamp(drop.path);
+    // toPdf / toStamp 只调 setState，无需进依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drop?.id]);
+
+  /** 选定待签 PDF：输出路径跟着走，同时作废上一次的签名结果 ——
+      留着上一个文件的「✓ 签名成功 D:\a_signed.pdf」会让用户以为刚拖进来的
+      这份也签好了。 */
+  const toPdf = (path: string) => {
+    setPdfPath(path);
+    const dotIdx = path.lastIndexOf(".");
+    const base = dotIdx > 0 ? path.slice(0, dotIdx) : path;
+    setOutputPath(`${base}_signed.pdf`);
+    setResult(null);
+  };
+
+  /** 选定签章图片。顺手打开「可视化签名」开关：关着的时候这张图根本不会
+      被用到，收下它却什么都不发生，等于骗用户「上传成功了」。 */
+  const toStamp = (path: string) => {
+    setSigImagePath(path);
+    setVisualSig(true);
+  };
+
   const pickPdf = async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
@@ -54,12 +85,15 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
         filters: [{ name: "PDF", extensions: ["pdf"] }],
       });
       if (typeof selected === "string") {
-        setPdfPath(selected);
-        const dotIdx = selected.lastIndexOf(".");
-        const base = dotIdx > 0 ? selected.slice(0, dotIdx) : selected;
-        setOutputPath(`${base}_signed.pdf`);
+        toPdf(selected);
       }
     } catch { /* cancelled */ }
+  };
+
+  const clearPdf = () => {
+    setPdfPath(null);
+    setOutputPath(null);
+    setResult(null);
   };
 
   const pickSigImage = async () => {
@@ -69,7 +103,7 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
         filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
       });
       if (typeof selected === "string") {
-        setSigImagePath(selected);
+        toStamp(selected);
       }
     } catch { /* cancelled */ }
   };
@@ -107,6 +141,9 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
     if (!outputPath) return;
     try {
       await navigator.clipboard.writeText(outputPath);
+      // 剪贴板写入没有任何可见反馈，用户没法确认按下去有没有生效。
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch { /* ignore */ }
   };
 
@@ -121,9 +158,22 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
       <div className="page-body">
         <div className="form-row">
           <label>{t("sign.selectPdf", lang)}</label>
-          <button className="btn-secondary" onClick={pickPdf}>
-            {pdfPath ? pdfPath.split(/[\\/]/).pop() : t("common.browse", lang)}
-          </button>
+          {/* form-row 提供 display:flex，form-row-inline 只负责改成横向 —— 缺一不可 */}
+          <div className="form-row form-row-inline">
+            <button className="btn-secondary" onClick={pickPdf} title={pdfPath ?? undefined}>
+              {pdfPath ? pdfPath.split(/[\\/]/).pop() : t("common.browse", lang)}
+            </button>
+            {pdfPath && (
+              <button
+                className="btn-secondary btn-small"
+                onClick={clearPdf}
+                title={t("sign.clearPdf", lang)}
+                aria-label={t("sign.clearPdf", lang)}
+              >
+                {t("common.clear", lang)}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="form-row">
@@ -194,11 +244,17 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
               ))}
             </div>
             <div className="sig-image-row">
-              <button type="button" className="btn-secondary btn-small" onClick={pickSigImage}>
+              <button type="button" className="btn-secondary btn-small" onClick={pickSigImage} title={sigImagePath ?? undefined}>
                 {sigImagePath ? sigImagePath.split(/[\\/]/).pop() : t("sign.uploadSig", lang)}
               </button>
               {sigImagePath && (
-                <button type="button" className="btn-link" onClick={() => setSigImagePath(null)}>
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setSigImagePath(null)}
+                  title={t("sign.removeStamp", lang)}
+                  aria-label={t("sign.removeStamp", lang)}
+                >
                   ✕
                 </button>
               )}
@@ -224,7 +280,7 @@ export default function SignPage({ lang, openRequest = 0, onLicenseExpired }: Pr
             ))}
             {resultPath && (
               <button className="btn-small result-copy-btn" onClick={copyOutput}>
-                Copy Path
+                {copied ? t("common.copied", lang) : t("sign.copyPath", lang)}
               </button>
             )}
           </div>

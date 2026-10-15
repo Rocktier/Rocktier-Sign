@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LOCALES, buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
 import { LicenseDialog } from "./components/LicenseDialog";
 import { licenseStatus, onLicenseExpired, type LicenseInfo } from "./services/license";
+import { routeDrop, type DropRequest } from "./services/dropFiles";
 import SignPage from "./pages/SignPage";
 import VerifyPage from "./pages/VerifyPage";
 import CertPage from "./pages/CertPage";
@@ -39,6 +41,16 @@ function App() {
   // 授权（家族 L6）：状态轮询 + 对话框开关。null = 尚未取到（或浏览器 dev）。
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [licenseOpen, setLicenseOpen] = useState(false);
+  /* 从系统拖进来的文件。两条独立的通道，而不是一条「当前页」的：
+     验证页正在看一份报告时拖入 PDF，不该被顺手切到签名页 ——
+     落点由 routeDrop 判定，这里只负责把它交给对的那一页。 */
+  const [signDrop, setSignDrop] = useState<DropRequest | null>(null);
+  const [verifyDrop, setVerifyDrop] = useState<DropRequest | null>(null);
+  /* 拖拽悬停态。只在「这份文件本应用用得上」时才亮 —— 拖一个 .txt 进来
+     不该出现任何提示，否则等于骗用户松手。enter 事件带 paths，判定得出来。 */
+  const [dragActive, setDragActive] = useState(false);
+  const pageRef = useRef<Page>(page);
+  const dropSeq = useRef(0);
 
   useEffect(() => {
     buildMenu(lang).catch(console.error);
@@ -63,6 +75,56 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : lang;
   }, [lang]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  /* ── 窗口级拖放 ──────────────────────────────────────────────────
+     用 Tauri 的原生事件而不是 HTML5 的 ondrop：webview 开着原生拖放时，
+     文件拖入不会派发 DOM 的 drag/drop 事件，挂在 <div> 上的 onDrop 永远不响。
+     事件类型见 @tauri-apps/api/webview 的 DragDropEvent（enter 带 paths，
+     over 不带 —— 所以判定只能发生在 enter 上）。 */
+  useEffect(() => {
+    // 浏览器 dev（无 Tauri）没有这个 API：静默跳过，别在控制台刷错。
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void getCurrentWindow()
+      .onDragDropEvent((event) => {
+        if (disposed) return;
+        const p = event.payload;
+        if (p.type === "enter") {
+          // 先判定认不认得：认得才亮提示，松手才有结果，两件事同一个判据。
+          setDragActive(routeDrop(pageRef.current, p.paths) !== null);
+          return;
+        }
+        if (p.type === "over") return; // over 不带 paths，不能在此重新判定
+        if (p.type === "leave") {
+          setDragActive(false);
+          return;
+        }
+        setDragActive(false);
+        const routed = routeDrop(pageRef.current, p.paths);
+        if (!routed) return;
+        const request: DropRequest = { id: ++dropSeq.current, kind: routed.kind, path: routed.path };
+        if (routed.page === "verify") setVerifyDrop(request);
+        else {
+          setPage("sign");
+          setSignDrop(request);
+        }
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Persist language choice (Batch 2 #10 fix)
   useEffect(() => {
@@ -224,10 +286,27 @@ function App() {
       </nav>
 
       <main className="page-container">
-        {page === "sign" && <SignPage lang={lang} openRequest={signOpenRequest} onLicenseExpired={openLicense} />}
-        {page === "verify" && <VerifyPage lang={lang} />}
+        {page === "sign" && (
+          <SignPage lang={lang} openRequest={signOpenRequest} drop={signDrop} onLicenseExpired={openLicense} />
+        )}
+        {page === "verify" && <VerifyPage lang={lang} drop={verifyDrop} />}
         {page === "cert" && <CertPage lang={lang} />}
       </main>
+
+      {/* 拖拽提示：全窗口覆盖层。pointer-events:none —— 松手由 Tauri 原生处理，
+          这层只负责让用户知道「松手会发生什么」。 */}
+      {dragActive && (
+        <div className="drop-overlay" aria-hidden="true">
+          <div className="drop-card">
+            <div className="drop-title">
+              {t(page === "verify" ? "drop.verify" : "drop.sign", lang)}
+            </div>
+            {page !== "verify" && (
+              <div className="drop-sub">{t("drop.sign.sub", lang)}</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {licenseOpen && (
         <LicenseDialog lang={lang} info={license} onRefresh={refreshLicense} onClose={() => setLicenseOpen(false)} />

@@ -699,6 +699,83 @@ button {
   font-size: 12px;
 }
 
+/* 选择文件按钮 + 清除按钮并排：让文件名按钮吃掉剩余宽度，长文件名靠
+   ellipsis 收，不把「清除」挤出容器。.btn-secondary 自带 align-self:flex-start，
+   在行内布局里改回 stretch，两个按钮才等高。 */
+.form-row-inline .btn-secondary {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+}
+
+/* 签章「✕」：原先是 4px padding 的裸字符（约 22px 命中区，低于家族 40px 标准，
+   且只有颜色变化没有底色反馈）。这里只补命中区与 hover 底，不改字形。 */
+.sig-image-row .btn-link {
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1;
+  transition: background var(--dur-hover) var(--ease), color var(--dur-hover) var(--ease);
+}
+
+.sig-image-row .btn-link:hover {
+  background: var(--bg-card-hover);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   窗口级拖放提示
+
+   只在「拖进来的文件本应用确实用得上」时才出现（判定见 services/dropFiles.ts）。
+   拖一个 .txt 进来什么也不显示 —— 提示浮层一旦对用不上的文件也亮，
+   等于骗用户松手。
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 整窗蒙层用家族既有的主题感知令牌 --head-bg（深色 rgba(0,0,0,.8) /
+   浅色 rgba(255,255,255,.8)），不另立新令牌。
+   pointer-events:none 是硬要求：松手由 Tauri 原生事件处理，
+   这一层只做提示，绝不能参与命中测试。 */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--head-bg);
+  pointer-events: none;
+}
+
+/* 虚线边框是「这里可以放下」的通用符号，不需要额外文字解释。 */
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 40px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--page-shadow);
+  text-align: center;
+  animation: drop-in var(--dur-enter) var(--ease);
+}
+
+@keyframes drop-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.drop-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.drop-sub {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    License（家族 L6）：侧栏授权胶囊 + 许可与激活对话框
    ═══════════════════════════════════════════════════════════════════ */
