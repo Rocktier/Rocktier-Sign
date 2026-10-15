@@ -27,10 +27,22 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.ROCKTIER_ROOT || join(HERE, "..", "..", "..", "..");
 const GLOSSARY = join(REPO, "docs", "rocktier", "i18n", "glossary.json");
 const SRC = join(HERE, "..", "src", "i18n.ts");
-const LANGS = ["ja", "ko", "de", "es", "pt", "ar"];
+/* 2026-10-13 家族裁定：语言收敛为 en/zh 两门 —— 非中英语种均为未审校机翻基线
+   （family.json globalRules.$locales_2026_10_13）。生成器不再产出 6 门译文：
+   留着 LANGS 等于留一条复活路径，谁跑一次本脚本，删掉的字典键全部回来。
+   scripts/i18n/<lang>.mjs 译文物保留作历史档案，不进构建。 */
+const LANGS = [];
 
 const args = process.argv.slice(2);
 const only = args.includes("--lang") ? args[args.indexOf("--lang") + 1] : null;
+
+/* 2026-10-13 收敛裁定后只允许 en/zh。拒绝显式生成其他语言 ——
+   否则 `--lang ja` 会把删掉的 6 门键全部写回 translations，
+   比不跑生成器更坏（静默复活）。 */
+if (only && !["en", "zh"].includes(only)) {
+  console.error(`  ❌ 语言已收敛为 en/zh 两门（2026-10-13 家族裁定），拒绝生成 "${only}"`);
+  process.exit(2);
+}
 
 if (!existsSync(GLOSSARY)) {
   console.error(`  ❌ 找不到家族术语表: ${GLOSSARY}\n     设 ROCKTIER_ROOT 指向家族根`);
@@ -107,6 +119,13 @@ for (const lang of only ? [only] : LANGS) {
   console.error(`  ✅ ${lang}: ${EXISTING.size} 条齐全`);
 }
 
+/* 没有要生成的语言时是**正常收工**，不是缺译文 ——
+   否则 LANGS 清零后每次跑都红一次，看两次就没人看了。 */
+if (!LANGS.length) {
+  console.error("\n  ⏭️ 语言已收敛为 en/zh 两门（2026-10-13 家族裁定），无译文可生成。\n");
+  process.exit(0);
+}
+
 if (missingTotal || !built) {
   console.error(`\n  ❌ 共 ${missingTotal} 条缺译文。补齐 scripts/i18n/<lang>.mjs 后重跑。\n`);
   process.exit(1);
@@ -135,7 +154,7 @@ const body2 = ordered.map(([k, row], i) => {
 
 const out = head.replace(
   'export type Lang = "en" | "zh";',
-  `/* 家族标准 8 门语言。由 scripts/gen-i18n.mjs 生成 translations 字典，勿手改。 */\nexport type Lang = "en" | "zh"${LANGS.map((l) => ` | "${l}"`).join("")};`
+  `/* 中英两门（2026-10-13 家族收敛裁定，见 family.json globalRules.$locales_2026_10_13）。\n   由 scripts/gen-i18n.mjs 生成 translations 字典，勿手改。 */\nexport type Lang = "en" | "zh"${LANGS.map((l) => ` | "${l}"`).join("")};`
 ).replace(
   'type Dict = Record<string, { en: string; zh: string }>;',
   `type Dict = Record<string, { en: string; zh: string${LANGS.map((l) => `; ${l}: string`).join("")} }>;`
