@@ -16,7 +16,7 @@
  * ① 缺键即拒绝生成 —— 不产出「界面一半英文」的包
  * ② 占位符逐字对齐 —— 丢了 {n} 界面上会直接露出来
  *
- * 用法：node scripts/gen-i18n.mjs [--lang ja]
+ * 用法：node scripts/gen-i18n.mjs    （--lang 仅接受 LANGS 里的语言 —— 2026-10-13 收敛后为空）
  */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -36,11 +36,13 @@ const LANGS = [];
 const args = process.argv.slice(2);
 const only = args.includes("--lang") ? args[args.indexOf("--lang") + 1] : null;
 
-/* 2026-10-13 收敛裁定后只允许 en/zh。拒绝显式生成其他语言 ——
-   否则 `--lang ja` 会把删掉的 6 门键全部写回 translations，
-   比不跑生成器更坏（静默复活）。 */
-if (only && !["en", "zh"].includes(only)) {
-  console.error(`  ❌ 语言已收敛为 en/zh 两门（2026-10-13 家族裁定），拒绝生成 "${only}"`);
+/* --lang 只接受 LANGS 里的语言 —— LANGS 是唯一真源（2026-10-13 收敛裁定后为空）。
+   en/zh 由基线数据恒产，不需要指定；基线外语言要重建必须先入 LANGS 并通过审校，
+   不能用 --lang 绕过。没有这道守卫时，`--lang ja` 会去读 scripts/i18n/ja.mjs
+   归档并罗列「缺 N 条译文、补齐后重跑」—— 那段话等于邀请把已删的机翻基线请回来。 */
+if (only && !LANGS.includes(only)) {
+  console.error(`  ❌ --lang "${only}"：不在 LANGS（当前为空 —— 2026-10-13 语言收敛裁定）。`);
+  console.error(`     en/zh 无需指定；基线外语言须先入 LANGS 并通过审校。`);
   process.exit(2);
 }
 
