@@ -1,0 +1,44 @@
+name: Checks
+
+# Sign 此前唯一的 push 工作流是 notify-family-gate：build.yml 只在 tag / 手动
+# 触发，且手动派发的发布无闸门（2026-10-16 阶段 51 只能开一次性 verify 标签
+# 应急）。2026-10-16（task_plan P0''，用户拍板）把 build.yml 里已被发版反复
+# 跑绿的「Tests & Lints」作业原样挂到 push —— 配方零改动，只换触发条件。
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Tests & Lints
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install dependencies
+        run: npm ci
+      - name: Build sign-engine (all targets)
+        run: |
+          cd sign-engine
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o ../src-tauri/sign-engine-windows.exe .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o ../src-tauri/sign-engine-macos .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o ../sign-engine-macos-amd64 .
+          cd ..
+      - name: Type check
+        run: npm run build
+      - name: Drop routing test
+        run: npm run test:drop
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
