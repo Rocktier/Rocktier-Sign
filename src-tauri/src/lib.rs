@@ -191,6 +191,11 @@ pub struct Ready(pub AtomicBool);
 /// File path passed via OS file association on cold start.
 pub struct InitialFile(pub Mutex<Option<String>>);
 
+/// 启动期到达的文档队列（tao#1235：冷启动时 `application:openURLs:` 早于
+/// setup/托管状态，`try_state` 拿不到任何东西，必须在进程级静态里排队，
+/// setup 完成后再搬进 `InitialFile`。Chromium 的 `_startupComplete` 同款）。
+static PENDING_DOCS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
 /// Cert metadata stored in the cert store directory.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct CertInfo {
@@ -800,6 +805,20 @@ pub fn run() {
         .setup(|app| {
             app.manage(Ready(AtomicBool::new(false)));
             app.manage(InitialFile(Mutex::new(file_from_args())));
+            // tao#1235：把冷启动队列里的文档搬进托管状态（setup 晚于
+            // application:openURLs:，此刻托管状态与窗口才真正可用）。
+            let queued: Vec<String> = PENDING_DOCS
+                .lock()
+                .expect("PENDING_DOCS poisoned")
+                .drain(..)
+                .collect();
+            if let Some(first) = queued.first() {
+                if let Some(state) = app.try_state::<InitialFile>() {
+                    if let Ok(mut slot) = state.0.lock() {
+                        *slot = Some(first.clone());
+                    }
+                }
+            }
             // 授权状态的落盘目录。取不到就留空，current_license() 会按"不拦截"处理
             // —— 宁可少拦一次，也不能因为一个目录取不到把用户锁在外面（与 PDF/MD 同款）。
             if let Ok(dir) = app.path().app_data_dir() {
@@ -847,6 +866,21 @@ pub fn run() {
                 api.prevent_close();
             }
         })
+        // 冷启动竞态补发：Opened 事件可能落在「前端查询 initial_file 之后、
+        // 监听器挂载之前」的空窗里。页面加载完成时若仍有待开文档，再补发一次 ——
+        // 前端 toPdf 幂等（只 setState），重复送达无副作用。
+        .on_page_load(|window, payload| {
+            if !matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                return;
+            }
+            if let Some(state) = window.app_handle().try_state::<InitialFile>() {
+                if let Ok(slot) = state.0.lock() {
+                    if let Some(path) = slot.as_ref() {
+                        let _ = window.emit("open-file", path.clone());
+                    }
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
@@ -858,6 +892,13 @@ pub fn run() {
                 let Some(path) = path.to_str() else { continue };
                 if !is_pdf_path(Path::new(path)) {
                     continue;
+                }
+                // tao#1235：冷启动时该事件在 setup/托管状态存在之前直达，所以先入
+                // 进程级队列，setup 再搬运。热启动先排空队列：队列只在 setup 里
+                // drain 一次，不排则每打开一个文件就多残留一条（缓慢内存泄漏）。
+                if let Ok(mut q) = PENDING_DOCS.lock() {
+                    q.clear();
+                    q.push(path.to_string());
                 }
                 if let Some(state) = _app_handle.try_state::<InitialFile>() {
                     if let Ok(mut slot) = state.0.lock() {

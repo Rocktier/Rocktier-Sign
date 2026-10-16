@@ -206,6 +206,44 @@ function App() {
     };
   }, [toggleTheme, openLicense]);
 
+  /* ── 文件关联（双击 / 「打开方式」）─────────────────────────────
+     冷启动：路径在 argv（Win/Linux）或初始 RunEvent::Opened（macOS）——
+     挂载后问一次 initial_file。热启动（macOS 应用已在运行）：对应的
+     RunEvent 转成 "open-file" 事件。冷启动时同一路径可能经查询与补发各到
+     一次；toPdf 幂等（只 setState），重复送达无副作用。
+     落点判定复用拖放那套纯函数（dropFiles.routeDrop）：验证页收到 PDF =
+     验证这份，其余任何页面 = 切到签名页签这份。 */
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const accept = (path: string) => {
+      const routed = routeDrop(pageRef.current, [path]);
+      if (!routed) return;
+      const request: DropRequest = { id: ++dropSeq.current, kind: routed.kind, path: routed.path };
+      if (routed.page === "verify") setVerifyDrop(request);
+      else {
+        setPage("sign");
+        setSignDrop(request);
+      }
+    };
+    void invoke<string | null>("initial_file")
+      .then((path) => {
+        if (!disposed && path) accept(path);
+      })
+      .catch(() => {});
+    void listen<string>("open-file", (e) => {
+      if (!disposed && e.payload) accept(e.payload);
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   return (
     <div className="app-root">
       <nav className="sidebar">
