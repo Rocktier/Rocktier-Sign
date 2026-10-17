@@ -713,7 +713,11 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
                 }),
             )?,
             &PredefinedMenuItem::separator(app)?,
+            // Windows 上 muda 的 hide_others 落进 `_ => {}` 点了无反应、hide 是
+            // SW_HIDE 窗口消失召不回（findings D-42）——仅 macOS 显示这两项。
+            #[cfg(target_os = "macos")]
             &PredefinedMenuItem::hide(app, None)?,
+            #[cfg(target_os = "macos")]
             &PredefinedMenuItem::hide_others(app, None)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "quit", m.quit, true, Some("CmdOrCtrl+Q"))?,
@@ -762,7 +766,12 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
         &[
             &PredefinedMenuItem::minimize(app, None)?,
             &PredefinedMenuItem::separator(app)?,
+            // macOS 原生全屏有效；Windows 上 muda 的 fullscreen 落进 `_ => {}` 点了
+            // 无反应，改用自定义 win-fullscreen 项，由 on_menu_event 调 set_fullscreen。
+            #[cfg(target_os = "macos")]
             &PredefinedMenuItem::fullscreen(app, None)?,
+            #[cfg(target_os = "windows")]
+            &MenuItem::with_id(app, "win-fullscreen", "Toggle Full Screen", true, None::<&str>)?,
         ],
     )?;
 
@@ -848,6 +857,13 @@ pub fn run() {
                 match app.get_webview_window("main") {
                     Some(window) => { let _ = window.close(); }
                     None => app.exit(0),
+                }
+                return;
+            }
+            // Windows 真全屏（替代 muda 在 Win 上无效的 PredefinedMenuItem::fullscreen）
+            if event.id().0.as_str() == "win-fullscreen" {
+                if let Some(win) = app.get_webview_windows().values().next().cloned() {
+                    let _ = win.set_fullscreen(!win.is_fullscreen().unwrap_or(false));
                 }
                 return;
             }
