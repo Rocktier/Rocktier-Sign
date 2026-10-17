@@ -7,6 +7,7 @@ import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components
 import { SignBadge } from "./components/Icons";
 import { LicenseDialog } from "./components/LicenseDialog";
 import { licenseStatus, onLicenseExpired, type LicenseInfo } from "./services/license";
+import { checkForUpdates, currentVersion, type UpdateResult } from "./services/updates";
 import { routeDrop, type DropRequest } from "./services/dropFiles";
 import SignPage from "./pages/SignPage";
 import VerifyPage from "./pages/VerifyPage";
@@ -27,6 +28,12 @@ type Resolved = "light" | "dark";
 const THEME_KEY = "rocktier.sign.theme";
 const THEME_CYCLE: readonly ThemeMode[] = ["auto", "light", "dark"];
 const LANG_KEY = "rocktier.sign.lang";
+const UPDATE_CHECKED_KEY = "rocktier.sign.updateCheckedAt";
+
+/** 打包时写死，与 tag 同源。 */
+const VERSION = currentVersion();
+
+type UpdateState = "idle" | "checking" | "uptodate" | "available" | "failed";
 
 function App() {
   const [lang, setLang] = useState<Lang>(() => {
@@ -51,6 +58,16 @@ function App() {
   const [dragActive, setDragActive] = useState(false);
   const pageRef = useRef<Page>(page);
   const dropSeq = useRef(0);
+  /* 更新检查。状态只由用户点击推进 —— 没有任何 effect 会自动跑它，
+     这是「除非你要求，应用不会联网」这条承诺的落点。 */
+  const [updateState, setUpdateState] = useState<UpdateState>("idle");
+  const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
+  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(() => {
+    const raw = localStorage.getItem(UPDATE_CHECKED_KEY);
+    const n = raw ? Number(raw) : 0;
+    return n > 0 ? n : null;
+  });
+  const updateChecking = useRef(false);
 
   useEffect(() => {
     buildMenu(lang).catch(console.error);
@@ -151,6 +168,25 @@ function App() {
     refreshLicense();
   }, [refreshLicense]);
 
+  /* 检查更新。**只有这里会触发联网检查** —— 左下角按钮与帮助菜单共用。
+     用 ref 而非 state 判重：连点两次不该发出两个请求。 */
+  const runUpdateCheck = useCallback(async () => {
+    if (updateChecking.current) return;
+    updateChecking.current = true;
+    setUpdateState("checking");
+    try {
+      const result = await checkForUpdates();
+      setUpdateResult(result);
+      setLastCheckedAt(result.checkedAt);
+      try { localStorage.setItem(UPDATE_CHECKED_KEY, String(result.checkedAt)); } catch {}
+      setUpdateState(result.hasUpdate ? "available" : "uptodate");
+    } catch {
+      setUpdateState("failed");
+    } finally {
+      updateChecking.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     refreshLicense();
     let disposed = false;
@@ -192,6 +228,9 @@ function App() {
         case "feedback":
           void invoke("open_url", { url: "mailto:hello@rocktier.com" }).catch(() => {});
           break;
+        case "check-updates":
+          void runUpdateCheck();
+          break;
         default:
           // 未接线的 action 降级为 no-op，不弹错误
           console.warn("[menu-action] unhandled:", e.payload);
@@ -204,7 +243,7 @@ function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [toggleTheme, openLicense]);
+  }, [toggleTheme, openLicense, runUpdateCheck]);
 
   /* ── 文件关联（双击 / 「打开方式」）─────────────────────────────
      冷启动：路径在 argv（Win/Linux）或初始 RunEvent::Opened（macOS）——
@@ -287,6 +326,40 @@ function App() {
                 : t("license.trialChip", lang, { days: license.daysLeft })}
             </button>
           )}
+          {/* 版本号 + 检查更新（家族更新入口）。
+              版本号本身做成入口而不是藏进菜单：侧栏底部常驻，看得见才会被点。
+              点击才联网 —— 启动时、工作中、后台都不检查，见 services/updates.ts 头注。 */}
+          <button
+            type="button"
+            className={`update-line${updateState === "available" ? " has-update" : ""}`}
+            onClick={() => void runUpdateCheck()}
+            disabled={updateState === "checking"}
+            title={t("update.privacyNote", lang)}
+          >
+            <span className="update-ver">v{VERSION}</span>
+            <span className="update-sep" aria-hidden="true">·</span>
+            <span className="update-action">
+              {updateState === "checking" ? t("update.checking", lang) : t("update.check", lang)}
+            </span>
+          </button>
+          <div className="update-note" role="status" aria-live="polite">
+            {updateState === "uptodate" && t("update.upToDate", lang)}
+            {updateState === "failed" && t("update.failed", lang)}
+            {updateState === "available" && updateResult && (
+              <button
+                type="button"
+                className="update-get"
+                onClick={() => void invoke("open_url", { url: updateResult.url }).catch(() => {})}
+                title={t("update.available", lang, { v: updateResult.latest })}
+              >
+                {t("update.download", lang, { v: updateResult.latest })}
+              </button>
+            )}
+            {updateState === "idle" &&
+              t("update.lastChecked", lang, {
+                d: lastCheckedAt ? formatCheckedAt(lastCheckedAt, lang) : t("update.never", lang),
+              })}
+          </div>
           {/* 家族唯一主题按钮：.icon-btn（28×28 + 40×40 命中区）。
               三态 auto → light → dark，data-mode 驱动角标，title/aria-label 说明当前档。 */}
           <button
@@ -374,4 +447,16 @@ function systemTheme(): Resolved {
 /** auto 落成实际生效值 —— data-theme 只接受 light/dark。 */
 function resolveTheme(mode: ThemeMode): Resolved {
   return mode === "auto" ? systemTheme() : mode;
+}
+
+/**
+ * 「上次检查」的时间戳格式化。跟随应用语言而非系统语言：
+ * 界面是中文就显示中文日期，避免中英混排。
+ */
+function formatCheckedAt(ts: number, lang: Lang): string {
+  try {
+    return new Date(ts).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US");
+  } catch {
+    return new Date(ts).toISOString().slice(0, 10);
+  }
 }

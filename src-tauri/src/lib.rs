@@ -635,6 +635,7 @@ struct MenuStrings {
     feedback: &'static str,
     about: &'static str,
     license: &'static str,
+    check_updates: &'static str,
 }
 
 impl MenuStrings {
@@ -646,50 +647,50 @@ impl MenuStrings {
                 open: "打开…", file: "文件", edit: "编辑", view: "显示", window: "窗口",
                 help: "帮助", toggle_theme: "切换日夜模式", quit: "退出",
                 website: "官方网站", feedback: "反馈",
-                about: "关于 Rocktier Sign", license: "许可与激活…",
+                about: "关于 Rocktier Sign", check_updates: "检查更新…", license: "许可与激活…",
             },
             "ja" => Self {
                 open: "開く…", file: "ファイル", edit: "編集", view: "表示", window: "ウインドウ",
                 help: "ヘルプ", toggle_theme: "テーマを切り替え", quit: "終了",
                 website: "公式サイト", feedback: "フィードバック",
-                about: "Rocktier Sign について", license: "ライセンス…",
+                about: "Rocktier Sign について", check_updates: "アップデートを確認…", license: "ライセンス…",
             },
             "ko" => Self {
                 open: "열기…", file: "파일", edit: "편집", view: "보기", window: "창",
                 help: "도움말", toggle_theme: "테마 전환", quit: "종료",
                 website: "공식 웹사이트", feedback: "피드백",
-                about: "Rocktier Sign 정보", license: "라이선스…",
+                about: "Rocktier Sign 정보", check_updates: "업데이트 확인…", license: "라이선스…",
             },
             "de" => Self {
                 open: "Öffnen…", file: "Datei", edit: "Bearbeiten", view: "Ansicht", window: "Fenster",
                 help: "Hilfe", toggle_theme: "Design wechseln", quit: "Beenden",
                 website: "Website", feedback: "Feedback",
-                about: "Über Rocktier Sign", license: "Lizenz…",
+                about: "Über Rocktier Sign", check_updates: "Nach Updates suchen…", license: "Lizenz…",
             },
             "es" => Self {
                 open: "Abrir…", file: "Archivo", edit: "Editar", view: "Ver", window: "Ventana",
                 help: "Ayuda", toggle_theme: "Cambiar tema", quit: "Salir",
                 website: "Sitio web", feedback: "Comentarios",
-                about: "Acerca de Rocktier Sign", license: "Licencia…",
+                about: "Acerca de Rocktier Sign", check_updates: "Buscar actualizaciones…", license: "Licencia…",
             },
             "pt" => Self {
                 open: "Abrir…", file: "Arquivo", edit: "Editar", view: "Exibir", window: "Janela",
                 help: "Ajuda", toggle_theme: "Alternar tema", quit: "Sair",
                 website: "Site", feedback: "Comentários",
-                about: "Sobre o Rocktier Sign", license: "Licença…",
+                about: "Sobre o Rocktier Sign", check_updates: "Verificar atualizações…", license: "Licença…",
             },
             "ar" => Self {
                 open: "فتح…", file: "ملف", edit: "تحرير", view: "عرض", window: "نافذة",
                 help: "مساعدة", toggle_theme: "تبديل المظهر", quit: "إنهاء",
                 website: "الموقع", feedback: "ملاحظات",
-                about: "حول Rocktier Sign", license: "الترخيص…",
+                about: "حول Rocktier Sign", check_updates: "التحقق من التحديثات…", license: "الترخيص…",
             },
             // English is both the family default and the fallback.
             _ => Self {
                 open: "Open…", file: "File", edit: "Edit", view: "View", window: "Window",
                 help: "Help", toggle_theme: "Toggle Theme", quit: "Quit",
                 website: "Website", feedback: "Feedback",
-                about: "About Rocktier Sign", license: "License…",
+                about: "About Rocktier Sign", check_updates: "Check for Updates…", license: "License…",
             },
         }
     }
@@ -780,7 +781,15 @@ fn build_app_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<()> {
     // 购买页面上写着"打开应用 → 帮助 → License → 输入激活码"，所以应用里必须真有一个
     // 能到那儿的常驻入口（侧栏授权胶囊在已激活/商店版下会隐藏，这里是兜底入口）。
     let license_i = MenuItem::with_id(app, "license", m.license, true, None::<&str>)?;
-    let help_menu = Submenu::with_items(app, m.help, true, &[&license_i, &site_i, &mail_i])?;
+    // 检查更新。它只 emit "check-updates"，联网由前端 services/updates.ts 做 ——
+    // 应用启动时不检查，只有用户点这里或侧栏底部的版本号才发那一次请求。
+    let update_i = MenuItem::with_id(app, "check-updates", m.check_updates, true, None::<&str>)?;
+    let help_menu = Submenu::with_items(
+        app,
+        m.help,
+        true,
+        &[&update_i, &license_i, &site_i, &mail_i],
+    )?;
 
     let menu = Menu::with_items(
         app,

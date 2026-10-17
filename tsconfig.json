@@ -11,6 +11,9 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    /* services/updates.ts 读取 ../../package.json 取当前版本号 ——
+       与 tag 同源，不会出现系统里装着新版本而代码里写着旧版本的错位。 */
+    "resolveJsonModule": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

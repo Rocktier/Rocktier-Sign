@@ -252,6 +252,81 @@ button {
   box-sizing: border-box;
 }
 
+/* ── 更新检查（侧栏底部）────────────────────────────────────────────
+   常驻可见，但刻意安静：比正文小一档、三级文字色，只有悬停才亮起来。
+   有可用更新时才转成 accent —— 用户没要求被提醒，就不该用红色徽标催他。 */
+.update-line {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-family: var(--font);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.update-line:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+.update-line:disabled {
+  cursor: default;
+}
+
+.update-ver {
+  font-variant-numeric: tabular-nums;
+}
+
+.update-sep {
+  opacity: 0.45;
+}
+
+.update-action {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.update-line:hover:not(:disabled) .update-action,
+.update-line.has-update .update-action {
+  text-decoration-color: currentColor;
+}
+
+.update-line.has-update {
+  color: var(--accent);
+}
+
+/* 结果行。占位高度固定，避免检查前后侧栏抖动。 */
+.update-note {
+  flex: 1 1 100%;
+  margin-top: 3px;
+  min-height: 16px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.update-get {
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.update-get:hover {
+  filter: brightness(1.08);
+}
+
 .lang-switch {
   display: flex;
   gap: 4px;

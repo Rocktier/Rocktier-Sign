@@ -394,6 +394,46 @@ export const translations: Dict = {
     en: "Activating sends the code to rocktier.com once and stores the signed reply locally. Nothing else is sent.",
     zh: "激活会把激活码发送到 rocktier.com 一次，并把签名回执保存在本机。除此之外不传输任何内容。",
   },
+
+  // ── 更新检查 ────────────────────────────────────────────────────
+  // 措辞要与 privacy.html 的 Update checks 一节一致：应用不主动联网，
+  // 只有点「检查更新」才发一次请求，且请求里不含任何标识信息。
+  "update.check": {
+    en: "Check for updates",
+    zh: "检查更新",
+  },
+  "update.checking": {
+    en: "Checking…",
+    zh: "正在检查…",
+  },
+  "update.upToDate": {
+    en: "You have the latest version.",
+    zh: "已是最新版本。",
+  },
+  "update.available": {
+    en: "Version {v} is available.",
+    zh: "发现新版本 {v}。",
+  },
+  "update.failed": {
+    en: "Could not check right now.",
+    zh: "暂时无法检查。",
+  },
+  "update.lastChecked": {
+    en: "Checked {d}",
+    zh: "上次检查 {d}",
+  },
+  "update.never": {
+    en: "never",
+    zh: "从未",
+  },
+  "update.download": {
+    en: "Get {v}",
+    zh: "获取 {v}",
+  },
+  "update.privacyNote": {
+    en: "Checking sends one request to GitHub for the latest version number. It carries no license code and nothing about your files.",
+    zh: "检查会向 GitHub 发一次请求获取最新版本号。请求不含许可证码，也不含与你的文件有关的任何信息。",
+  },
 };
 
 
