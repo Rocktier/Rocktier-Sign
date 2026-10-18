@@ -257,6 +257,7 @@ button {
    有可用更新时才转成 accent —— 用户没要求被提醒，就不该用红色徽标催他。 */
 .update-line {
   flex: 1 1 100%;
+  min-height: 24px;
   display: flex;
   align-items: center;
   gap: 5px;
