@@ -33,7 +33,7 @@ pub const TRIAL_DAYS: i64 = 7;
 /// 才上线，无价格无购买入口），此时开启拦截会发出一个"7 天后无法解锁、且没有任何
 /// 办法解锁"的包。所以先只记账不拦截 —— **官网上架可购后改 true**：闸门代码已全部
 /// 接好（sign_pdf 首行 ensure_write_allowed + 前端对话框），翻这一个常量即生效。
-pub const ENFORCE: bool = false;
+pub const ENFORCE: bool = true;
 
 /// 分发渠道。
 ///

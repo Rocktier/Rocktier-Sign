@@ -18,6 +18,8 @@ export interface LicenseInfo {
   channel: "direct" | "store";
   /** False when this build has no verification key, i.e. nothing can be activated. */
   activationConfigured: boolean;
+  /** 仅 licensed 时有值：回执里的交易号（吊销复检凭据）。 */
+  txn: string | null;
 }
 
 /** Current trial / activation state. */
@@ -74,6 +76,26 @@ export async function activate(code: string): Promise<LicenseInfo> {
 }
 
 /** Fires when a write was refused because the trial ran out and nothing is activated. */
+/**
+ * 吊销复检：用户点击「检查更新」时顺带向服务端核对一次许可状态。
+ * 只在用户点击时联网（与更新检查同一承诺）；请求只携带回执里本就有的交易号。
+ * revoked 时清除本地回执 —— 授权状态回到未激活，写闸门按状态拦截。
+ */
+export async function revalidateLicence(): Promise<"ok" | "revoked" | "unknown"> {
+  const info = await licenseStatus();
+  if (!info.txn) return "unknown";
+  try {
+    const res = await fetch(`https://rocktier.com/api/revalidate?txn=${encodeURIComponent(info.txn)}`);
+    if (!res.ok) return "unknown";
+    const data = (await res.json()) as { revoked?: boolean };
+    if (!data.revoked) return "ok";
+    await invoke("clear_receipt");
+    return "revoked";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function onLicenseExpired(handler: () => void): Promise<() => void> {
   return listen("license-expired", () => handler());
 }

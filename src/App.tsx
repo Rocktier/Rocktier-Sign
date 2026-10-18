@@ -6,7 +6,7 @@ import { LOCALES, buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
 import { LicenseDialog } from "./components/LicenseDialog";
-import { licenseStatus, onLicenseExpired, type LicenseInfo } from "./services/license";
+import { licenseStatus, onLicenseExpired, revalidateLicence, type LicenseInfo } from "./services/license";
 import { checkForUpdates, currentVersion, type UpdateResult } from "./services/updates";
 import { routeDrop, type DropRequest } from "./services/dropFiles";
 import SignPage from "./pages/SignPage";
@@ -180,6 +180,13 @@ function App() {
       setLastCheckedAt(result.checkedAt);
       try { localStorage.setItem(UPDATE_CHECKED_KEY, String(result.checkedAt)); } catch {}
       setUpdateState(result.hasUpdate ? "available" : "uptodate");
+      /* 顺带吊销复检：同一次点击、同一承诺（只在点击时联网）。revoked → 清回执，
+         授权状态回到未激活并弹激活对话框（openLicense 内含 refreshLicense）。 */
+      const verdict = await revalidateLicence();
+      if (verdict === "revoked") {
+        refreshLicense();
+        openLicense();
+      }
     } catch {
       setUpdateState("failed");
     } finally {
@@ -243,7 +250,7 @@ function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [toggleTheme, openLicense, runUpdateCheck]);
+  }, [toggleTheme, openLicense, refreshLicense, runUpdateCheck]);
 
   /* ── 文件关联（双击 / 「打开方式」）─────────────────────────────
      冷启动：路径在 argv（Win/Linux）或初始 RunEvent::Opened（macOS）——
