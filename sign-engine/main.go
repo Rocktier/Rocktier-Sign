@@ -40,6 +40,8 @@ func main() {
 		cmdGenerateKey()
 	case "generate-sig-image":
 		cmdGenerateSigImage()
+	case "inspect-cert":
+		cmdInspectCert()
 	default:
 		usage()
 	}
@@ -53,6 +55,7 @@ func usage() {
 	fmt.Println("  verify         Verify a PDF signature")
 	fmt.Println("  generate-key   Generate a self-signed certificate + private key")
 	fmt.Println("  generate-sig-image  Generate a default signature appearance PNG")
+	fmt.Println("  inspect-cert    Inspect & normalize an imported certificate/key (PEM/DER/PFX)")
 	fmt.Println("")
 	fmt.Println("  sign -name <name> -input <input.pdf> -output <output.pdf> -key <private.key> -cert <cert.crt> [-image <sig.png>] [-position <top-left|top-right|bottom-left|bottom-right>] [-page <n>]")
 	fmt.Println("  verify <input.pdf>")
@@ -120,6 +123,37 @@ func loadCertificate(path string) (*x509.Certificate, error) {
 	return x509.ParseCertificate(block.Bytes)
 }
 
+// loadCertChain 读入全部 CERTIFICATE 块（叶子在前，保持文件顺序）。
+// 外部导入的证书常带中间件；inspect-cert 的归一化 cert-out 也是这个布局。
+// 单张自签名证书返回 (cert, nil, nil)，签名路径行为与旧版完全一致。
+func loadCertChain(path string) (*x509.Certificate, []*x509.Certificate, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	var certs []*x509.Certificate
+	rest := data
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse certificate in %s: %w", path, err)
+		}
+		certs = append(certs, c)
+	}
+	if len(certs) == 0 {
+		return nil, nil, fmt.Errorf("no PEM certificate found in %s", path)
+	}
+	return certs[0], certs[1:], nil
+}
+
 func cmdSign() {
 	var name, input, output, keyPath, certPath, imagePath, position string
 	var page int
@@ -158,7 +192,7 @@ func cmdSign() {
 		os.Exit(2)
 	}
 
-	cert, err := loadCertificate(certPath)
+	cert, extraCerts, err := loadCertChain(certPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading certificate: %v\n", err)
 		os.Exit(2)
@@ -180,6 +214,12 @@ func cmdSign() {
 		Signer:          signer,
 		DigestAlgorithm: crypto.SHA256,
 		Certificate:     cert,
+	}
+
+	// 有中间证书时走 pdfsign 原生的 CertificateChains（[0][0]=叶子由 Certificate
+	// 字段单独承担，[1:] 作为附加链嵌入）。单张自签名证书不设该字段 —— 行为与旧版逐字一致。
+	if len(extraCerts) > 0 {
+		signData.CertificateChains = [][]*x509.Certificate{append([]*x509.Certificate{cert}, extraCerts...)}
 	}
 
 	// If image path provided OR position explicitly requested, add visual appearance

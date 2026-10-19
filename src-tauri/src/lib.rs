@@ -226,6 +226,109 @@ pub struct CertInfo {
     pub name: String,
     pub created: String,
     pub path: String,
+    /// 证书元数据 sidecar（inspect-cert 产出）；生成/旧证书缺 sidecar 时为 None，
+    /// 序列化时省略 —— TS 侧 meta?: CertMeta。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<CertMeta>,
+}
+
+/// 证书元数据 sidecar（{name}.meta.json）。来源是引擎 inspect-cert 的 JSON：
+/// 有效期/主体/链长驱动 CertPage 展示；sign_pdf 据此做过期硬确认（D-52）。
+/// 所有字段带 default：sidecar 永远向后兼容（老 JSON 少字段也能读）。
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct CertMeta {
+    #[serde(default)] pub subject: String,
+    #[serde(default)] pub cn: String,
+    #[serde(default)] pub issuer: String,
+    #[serde(default)] pub not_before: String,
+    #[serde(default)] pub not_after: String,
+    #[serde(default)] pub key_type: String,
+    #[serde(default)] pub chain_len: u32,
+    #[serde(default)] pub expired: bool,
+    /// 用户在证书页对**已过期**证书点过「仍要使用」后为 true —— 过期硬确认的
+    /// 确认手势记忆。确认放在 CertPage（SignPage 零改动）；未过期证书永不置位。
+    #[serde(default)] pub allow_expired: bool,
+}
+
+/// 前端把二进制文件按 latin1 逐字节转成字符串走 JSON（零新增依赖）；
+/// Rust 侧逐 char 还原字节 —— U+0000..U+00FF 无损往返。
+fn latin1_to_bytes(s: &str) -> Vec<u8> {
+    s.chars().map(|c| u32::from(c) as u8).collect()
+}
+
+/// sidecar 读取。读不到/坏 JSON 返回 None（旧证书没有 meta，不影响任何路径）。
+fn read_cert_meta(store: &std::path::Path, name: &str) -> Option<CertMeta> {
+    let p = store.join(format!("{name}.meta.json"));
+    let s = fs::read_to_string(p).ok()?;
+    serde_json::from_str(&s).ok()
+}
+
+fn write_cert_meta(store: &std::path::Path, name: &str, meta: &CertMeta) -> Result<(), String> {
+    let p = store.join(format!("{name}.meta.json"));
+    let json = serde_json::to_string_pretty(meta).map_err(|e| e.to_string())?;
+    fs::write(p, json).map_err(|e| e.to_string())
+}
+
+/// 检查/导入用的临时目录（0700）—— 里面会短暂出现（可能加密的）私钥文件。
+/// 调用方负责用完 remove_dir_all。
+fn make_inspect_tmp() -> Result<PathBuf, String> {
+    let tmp = std::env::temp_dir().join(format!(
+        "rocktier-sign-import-{}-{}",
+        std::process::id(),
+        temp_suffix()
+    ));
+    fs::create_dir_all(&tmp).map_err(|e| format!("create temp: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o700));
+    }
+    Ok(tmp)
+}
+
+/// engine inspect-cert 的三种失败形态（退出码 7 / 6 / 其它）。
+enum InspectFail {
+    /// 输入是加密私钥但没给口令 → 前端弹密码框（CERT_IMPORT_PASSWORD_REQUIRED）。
+    PasswordRequired,
+    /// 私钥与证书不配对 → 前端展示固定说明（CERT_KEY_MISMATCH）。
+    KeyMismatch,
+    Other(String),
+}
+
+fn engine_inspect(
+    engine: &std::path::Path,
+    key_in: &std::path::Path,
+    cert_in: Option<&std::path::Path>,
+    password: Option<&str>,
+    tmp: &std::path::Path,
+) -> Result<CertMeta, InspectFail> {
+    let meta_json = tmp.join("meta.json");
+    let key_out = tmp.join("out.key");
+    let cert_out = tmp.join("out.crt");
+
+    let mut cmd = Command::new(engine);
+    cmd.arg("inspect-cert")
+        .arg("-key").arg(key_in)
+        .arg("-key-out").arg(&key_out)
+        .arg("-cert-out").arg(&cert_out)
+        .arg("-json-out").arg(&meta_json);
+    if let Some(c) = cert_in {
+        cmd.arg("-cert").arg(c);
+    }
+    if let Some(pw) = password {
+        if !pw.is_empty() {
+            cmd.arg("-password").arg(pw);
+        }
+    }
+    let out = cmd.output().map_err(|e| InspectFail::Other(format!("engine exec: {e}")))?;
+    match out.status.code() {
+        Some(0) => {}
+        Some(7) => return Err(InspectFail::PasswordRequired),
+        Some(6) => return Err(InspectFail::KeyMismatch),
+        _ => return Err(InspectFail::Other(String::from_utf8_lossy(&out.stderr).to_string())),
+    }
+    let s = fs::read_to_string(&meta_json).map_err(|e| InspectFail::Other(format!("read meta: {e}")))?;
+    serde_json::from_str(&s).map_err(|e| InspectFail::Other(format!("parse meta: {e}")))
 }
 
 /// PDF file extensions we handle.
@@ -353,6 +456,15 @@ fn sign_pdf(
         let c = store.join(format!("{id}.crt"));
         if !c.exists() {
             return Err(format!("cert '{id}' not found in store"));
+        }
+
+        // 过期硬确认（D-52）：过期证书的签署必须先在证书页点过「仍要使用」。
+        // 路障设在不可逆一环 —— 导入错可逆（5 秒重导），签错不可逆。没有 meta
+        // 的老证书不拦：我们不知道它的有效期，宁可多放不锁人。
+        if let Some(meta) = read_cert_meta(&store, &id) {
+            if meta.expired && !meta.allow_expired {
+                return Err(format!("CERT_EXPIRED_CONFIRM|{id}|{}", meta.not_after));
+            }
         }
 
         let key_pem = match keyring::Entry::new(KEYRING_SERVICE, &keyring_user(&id)) {
@@ -559,13 +671,146 @@ fn generate_key(
 
     // Move the public cert into the store; the private key never lands on disk.
     fs::copy(&cert_tmp, &cert_out).map_err(|e| format!("write cert: {e}"))?;
+
+    // 生成路径也产 meta（有效期/主体进 CertPage 展示；过期闸门对生成证书同样生效）。
+    // inspect 失败不该让一次成功的生成失败 —— meta 缺席只是少展示，退回 None。
+    let meta = engine_inspect(&engine, &key_tmp, Some(&cert_tmp), None, &tmp).ok();
+    if let Some(m) = &meta {
+        let _ = write_cert_meta(&store, &name, m);
+    }
     let _ = fs::remove_dir_all(&tmp);
 
     Ok(CertInfo {
         name: name.clone(),
         created: chrono::Local::now().to_rfc3339(),
         path: cert_out.to_string_lossy().into_owned(),
+        meta,
     })
+}
+
+/// 导入前预览：只跑引擎 inspect-cert 读元数据，不写 store、不进 keychain。
+/// UI 流程：选文件 → 预览（CN 预填 + 有效期/链长展示）→ 改名 → 导入。
+#[tauri::command]
+fn inspect_cert_files(
+    app: tauri::AppHandle,
+    key_data: String,
+    cert_data: Option<String>,
+    password: Option<String>,
+) -> Result<CertMeta, String> {
+    let engine = engine_path(&app)?;
+    if !engine.exists() {
+        return Err(format!("sign-engine not found at {engine:?}"));
+    }
+    let tmp = make_inspect_tmp()?;
+    let key_in = tmp.join("in.key");
+    fs::write(&key_in, latin1_to_bytes(&key_data)).map_err(|e| format!("write key input: {e}"))?;
+    let cert_in = match cert_data.as_deref() {
+        Some(c) if !c.trim().is_empty() => {
+            let p = tmp.join("in.crt");
+            fs::write(&p, latin1_to_bytes(c)).map_err(|e| format!("write cert input: {e}"))?;
+            Some(p)
+        }
+        _ => None,
+    };
+    // password 是用户自己的证书口令：只作为引擎参数在内存传递，不落盘不写日志。
+    let meta = engine_inspect(&engine, &key_in, cert_in.as_deref(), password.as_deref(), &tmp)
+        .map_err(inspect_fail_to_err)?;
+    let _ = fs::remove_dir_all(&tmp);
+    Ok(meta)
+}
+
+fn inspect_fail_to_err(f: InspectFail) -> String {
+    match f {
+        InspectFail::PasswordRequired => "CERT_IMPORT_PASSWORD_REQUIRED".to_string(),
+        InspectFail::KeyMismatch => {
+            "CERT_KEY_MISMATCH: the private key does not match this certificate".to_string()
+        }
+        InspectFail::Other(e) => e,
+    }
+}
+
+/// 导入外部证书 + 私钥（阶段 69 / D-52 方案，v1 全格式）。
+///
+/// 格式支持在 Go 引擎（inspect-cert）：裸 PEM / 口令加密 PEM / PFX·P12 / DER /
+/// 证书链。本命令纪律与 generate_key 一致：
+///   - 私钥归一化后**只进 OS keychain**，临时文件即用即删，绝不进 store；
+///   - **不受授权闸门拦截**（过期用户必须仍能导入，否则激活后也无证可用）；
+///   - 同名 .crt 已存在 → 拒绝（静默覆盖会毁掉旧私钥）。
+/// 过期证书允许导入（导入警告放行），签署时的硬确认在 sign_pdf + 证书页。
+#[tauri::command]
+fn import_cert(
+    app: tauri::AppHandle,
+    name: String,
+    key_data: String,
+    cert_data: Option<String>,
+    password: Option<String>,
+) -> Result<CertMeta, String> {
+    let engine = engine_path(&app)?;
+    if !engine.exists() {
+        return Err(format!("sign-engine not found at {engine:?}"));
+    }
+    let name = sanitize_cert_name(&name)?;
+    let store = cert_store_dir(&app)?;
+    let cert_out_path = store.join(format!("{name}.crt"));
+    if cert_out_path.exists() {
+        return Err(format!(
+            "A certificate named \"{name}\" already exists. Choose a different name."
+        ));
+    }
+
+    let tmp = make_inspect_tmp()?;
+    let key_in = tmp.join("in.key");
+    fs::write(&key_in, latin1_to_bytes(&key_data)).map_err(|e| format!("write key input: {e}"))?;
+    let cert_in = match cert_data.as_deref() {
+        Some(c) if !c.trim().is_empty() => {
+            let p = tmp.join("in.crt");
+            fs::write(&p, latin1_to_bytes(c)).map_err(|e| format!("write cert input: {e}"))?;
+            Some(p)
+        }
+        _ => None,
+    };
+    let meta = engine_inspect(&engine, &key_in, cert_in.as_deref(), password.as_deref(), &tmp)
+        .map_err(inspect_fail_to_err)?;
+
+    // 私钥进 keychain（generate_key 同款）；keychain 失败则整体失败，不留半态。
+    let key_pem = fs::read_to_string(tmp.join("out.key"))
+        .map_err(|e| format!("read normalized key: {e}"))?;
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &keyring_user(&name))
+        .map_err(|e| {
+            let _ = fs::remove_dir_all(&tmp);
+            format!("keychain init: {e}")
+        })?;
+    entry.set_password(&key_pem).map_err(|e| {
+        let _ = fs::remove_dir_all(&tmp);
+        format!("store private key in system keychain failed: {e}")
+    })?;
+
+    // 证书链进 store；meta sidecar 记有效期与确认状态（allow_expired 此时必为 false：
+    // 「签署时硬确认」的手势在证书页做，导入不代签）。
+    fs::copy(tmp.join("out.crt"), &cert_out_path).map_err(|e| format!("write cert: {e}"))?;
+    write_cert_meta(&store, &name, &meta)?;
+    let _ = fs::remove_dir_all(&tmp);
+    Ok(meta)
+}
+
+/// 过期证书的签署确认（D-52「签署时硬确认」的确认手势，在证书页点）。
+/// 未过期证书直接 Ok（无需也不应置位）；没有 meta 的老证书同样 Ok（闸门本来就不拦）。
+#[tauri::command]
+fn allow_expired_cert(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let name = sanitize_cert_name(&name)?;
+    let store = cert_store_dir(&app)?;
+    if !store.join(format!("{name}.crt")).exists() {
+        return Err(format!("cert '{name}' not found in store"));
+    }
+    let mut meta = match read_cert_meta(&store, &name) {
+        Some(m) => m,
+        None => return Ok(()),
+    };
+    if !meta.expired {
+        return Ok(());
+    }
+    meta.allow_expired = true;
+    write_cert_meta(&store, &name, &meta)
 }
 
 /// List all certificates in the store.
@@ -595,6 +840,7 @@ fn list_certs(app: tauri::AppHandle) -> Result<Vec<CertInfo>, String> {
                     name: stem.to_string(),
                     created,
                     path: path.to_string_lossy().into_owned(),
+                    meta: read_cert_meta(&store, stem),
                 });
             }
         }
@@ -877,6 +1123,9 @@ pub fn run() {
             verify_pdf,
             generate_key,
             list_certs,
+            inspect_cert_files,
+            import_cert,
+            allow_expired_cert,
             set_default_cert,
             get_default_cert,
             build_menu,

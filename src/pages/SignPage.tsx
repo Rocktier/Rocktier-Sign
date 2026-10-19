@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { localizeError } from "../services/errorText";
 import { t, type Lang } from "../i18n";
 import { isLicenseExpiredError } from "../services/license";
 import type { DropRequest } from "../services/dropFiles";
@@ -132,7 +133,7 @@ export default function SignPage({ lang, openRequest = 0, drop = null, onLicense
       // 事件链（license-expired）已弹对话框；这里兜错误串，防事件丢失时只剩裸失败。
       // ENFORCE=false 期间闸门不拦，此分支在官网上架可购后（翻 license::ENFORCE）生效。
       if (onLicenseExpired && isLicenseExpiredError(e)) onLicenseExpired();
-      else setResult({ ok: false, msg: `${t("sign.error", lang)}: ${e}` });
+      else setResult({ ok: false, msg: `${t("sign.error", lang)}: ${localizeError(String(e), lang)}` });
     }
     setBusy(false);
   };

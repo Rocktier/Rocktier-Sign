@@ -17,8 +17,11 @@ import { t, type Lang } from "../i18n";
 
 /** Rust 错误原文 → i18n 键。键须在 `translations` 里 en/zh 两侧都存在。 */
 const EXACT: Record<string, string> = {
-  // lib.rs: generate_key —— 重名会让旧私钥被静默覆盖，故 Rust 侧拒绝。
+  // lib.rs: generate_key / import_cert —— 重名会让旧私钥被静默覆盖，故 Rust 侧拒绝。
   "Invalid certificate name": "cert.errorNameTaken",
+  // import_cert：加密输入但没给口令（前端据此弹出密码框）。
+  "CERT_IMPORT_PASSWORD_REQUIRED": "cert.import.passwordRequired",
+  "CERT_KEY_MISMATCH: the private key does not match this certificate": "cert.import.keyMismatch",
 };
 
 /** 归一化匹配：忽略大小写、标点与多余空白。同一句意思在 Rust 里常被写两遍。 */
@@ -44,6 +47,13 @@ export function localizeError(raw: string, lang: Lang): string {
 
   // 许可错误码走专用处理路径（对话框已分流），不该被当成普通错误改写。
   if (raw === "LICENSE_EXPIRED" || raw === "LICENSE_WRONG_PRODUCT") return raw;
+
+  // 过期硬确认（D-52）：Rust 返回 CERT_EXPIRED_CONFIRM|<id>|<notAfter>。
+  // 签署被拦是有意的路障 —— 文案必须把「去证书页点仍要使用」说清楚。
+  if (raw.startsWith("CERT_EXPIRED_CONFIRM|")) {
+    const date = raw.split("|")[2] ?? "";
+    return t("cert.expiredConfirm", lang, { date });
+  }
 
   const key = EXACT[raw] ?? NORMALIZED[normalize(raw)];
   if (!key) return raw; // 未知文案 → 原样显示底层真实错误，不隐藏细节

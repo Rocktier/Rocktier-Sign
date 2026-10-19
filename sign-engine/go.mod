@@ -4,7 +4,9 @@ go 1.27.0
 
 require (
 	github.com/digitorus/pdfsign v0.9.0
+	golang.org/x/crypto v0.53.0
 	golang.org/x/image v0.30.0
+	software.sslmate.com/src/go-pkcs12 v0.7.4
 )
 
 require (
@@ -12,6 +14,5 @@ require (
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )

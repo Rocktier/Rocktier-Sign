@@ -277,6 +277,66 @@ export const translations: Dict = {
     en: "A certificate with this name already exists. Pick another name to keep the existing key.",
     zh: "已存在同名证书。换一个名字，以免覆盖现有的密钥。",
   },
+  "cert.import.keyFile": {
+    en: "Private key (.pem / .key / .p12 / .pfx / .der)",
+    zh: "私钥文件（.pem / .key / .p12 / .pfx / .der）",
+  },
+  "cert.import.certFile": {
+    en: "Certificate (.crt / .pem / .cer) — optional for .p12",
+    zh: "证书文件（.crt / .pem / .cer；.p12 可留空）",
+  },
+  "cert.import.password": {
+    en: "Key passphrase (only for encrypted files)",
+    zh: "私钥口令（加密文件才需要）",
+  },
+  "cert.import.preview": {
+    en: "Inspect",
+    zh: "检查并预览",
+  },
+  "cert.import.do": {
+    en: "Import",
+    zh: "导入",
+  },
+  "cert.import.subject": {
+    en: "Subject",
+    zh: "主体",
+  },
+  "cert.import.issuer": {
+    en: "Issuer",
+    zh: "签发者",
+  },
+  "cert.import.validUntil": {
+    en: "Valid until",
+    zh: "有效期至",
+  },
+  "cert.import.keyType": {
+    en: "Key",
+    zh: "密钥",
+  },
+  "cert.import.chain": {
+    en: "Chain",
+    zh: "证书链",
+  },
+  "cert.import.passwordRequired": {
+    en: "This file is encrypted. Enter the passphrase and inspect again.",
+    zh: "该文件已加密，请输入口令后重新检查。",
+  },
+  "cert.import.keyMismatch": {
+    en: "The private key does not match this certificate — check the selected files.",
+    zh: "私钥与证书不配对——请检查是否选错了文件。",
+  },
+  "cert.expired": {
+    en: "Expired",
+    zh: "已过期",
+  },
+  "cert.expiredConfirm": {
+    en: "This certificate expired on {date}. Open the Certificates page, pick it and press \"Still use\" to confirm, then sign again.",
+    zh: "此证书已于 {date} 过期。请在「证书」页选中它并点「仍要使用」确认，再重新签署。",
+  },
+  "cert.allowExpired": {
+    en: "Still use (won't ask again for signing)",
+    zh: "仍要使用（签署时不再询问）",
+  },
   "common.browse": {
     en: "Browse…",
     zh: "浏览…",
