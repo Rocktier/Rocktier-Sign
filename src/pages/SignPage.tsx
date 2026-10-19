@@ -1,5 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import * as pdfjsLib from "pdfjs-dist";
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// pdf.js worker 走 Vite 资产 URL（Tauri webview 内可直接加载）。
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+
+/** 签名框的默认尺寸（PDF 点）——与引擎 positionToCoords 的 220×72 一致。 */
+const SIG_W_PT = 220;
+const SIG_H_PT = 72;
 import { localizeError } from "../services/errorText";
 import { t, type Lang } from "../i18n";
 import { isLicenseExpiredError } from "../services/license";
@@ -28,6 +36,135 @@ export default function SignPage({ lang, openRequest = 0, drop = null, onLicense
   const [sigPosition, setSigPosition] = useState("bottom-right");
   const [sigImagePath, setSigImagePath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // ── 签名摆放（D-53 v1）：pdf.js 真实页面预览 + 拖拽 + 落页 ──
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // eslint 提示 any 不安全；pdf.js 的文档对象跨页复用，类型从简。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const docRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderTaskRef = useRef<any>(null);
+  const dragRef = useRef<{ startX: number; startY: number; fxL: number; fyT: number } | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [pageCount, setPageCount] = useState(0);
+  const [pageSize, setPageSize] = useState<{ w: number; h: number } | null>(null);
+  /** 摆放框左上角的页面占比（0..1）。宽度/高度由默认签名尺寸换算，不单独存。 */
+  const [placement, setPlacement] = useState<{ fxL: number; fyT: number } | null>(null);
+
+  // 换文件：重建 pdf.js 文档，页码与摆放归位（渲染 effect 接管）。
+  useEffect(() => {
+    let cancelled = false;
+    if (!pdfPath) {
+      docRef.current = null;
+      setPageCount(0);
+      setPageSize(null);
+      setPlacement(null);
+      setPreviewPage(1);
+      return;
+    }
+    (async () => {
+      try {
+        const buf = await invoke<ArrayBuffer>("read_pdf_bytes", { path: pdfPath });
+        if (cancelled) return;
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        if (cancelled) {
+          void doc.cleanup();
+          return;
+        }
+        docRef.current = doc;
+        setPageCount(doc.numPages);
+        setPreviewPage(1);
+        setPlacement(null);
+      } catch {
+        // 打不开（加密/损坏）—— 预览缺席，不影响签署主流程
+        docRef.current = null;
+        setPageCount(0);
+        setPageSize(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfPath]);
+
+  // 渲染当前页到 canvas；scale=1 的视口宽高即 PDF 点尺寸（拖拽换算的基准）。
+  useEffect(() => {
+    const doc = docRef.current;
+    const canvas = canvasRef.current;
+    if (!doc || !canvas || previewPage < 1 || (pageCount > 0 && previewPage > pageCount)) return;
+    let dead = false;
+    (async () => {
+      try {
+        const page = await doc.getPage(previewPage);
+        if (dead) return;
+        const base = page.getViewport({ scale: 1 });
+        setPageSize({ w: base.width, h: base.height });
+        const scale = Math.min(1.5, 620 / base.width);
+        const vp = page.getViewport({ scale });
+        canvas.width = Math.floor(vp.width);
+        canvas.height = Math.floor(vp.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        renderTaskRef.current?.cancel();
+        const task = page.render({ canvas: canvas, viewport: vp });
+        renderTaskRef.current = task;
+        await task.promise;
+      } catch {
+        /* 取消或损坏 —— 预览缺席不影响签署 */
+      }
+    })();
+    return () => {
+      dead = true;
+      try { renderTaskRef.current?.cancel(); } catch { /* already done */ }
+    };
+  }, [previewPage, pageCount]);
+
+  // 页面尺寸就绪后给摆放框一个默认位置（右下内侧，衔接旧四角习惯）。
+  useEffect(() => {
+    if (pageSize && placement === null) {
+      setPlacement({
+        fxL: Math.max(0, 1 - SIG_W_PT / pageSize.w - 0.04),
+        fyT: Math.max(0, 1 - SIG_H_PT / pageSize.h - 0.06),
+      });
+    }
+  }, [pageSize, placement]);
+
+  const onBoxPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!placement) return;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, fxL: placement.fxL, fyT: placement.fyT };
+  };
+  const onBoxPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    const canvas = canvasRef.current;
+    if (!d || !canvas) return;
+    const cssW = canvas.getBoundingClientRect().width;
+    const dxFrac = (e.clientX - d.startX) / cssW;
+    const dyFrac = (e.clientY - d.startY) / ((cssW * canvas.height) / canvas.width);
+    const fw = SIG_W_PT / (pageSize?.w ?? 595);
+    const fh = SIG_H_PT / (pageSize?.h ?? 842);
+    setPlacement({
+      fxL: Math.min(Math.max(d.fxL + dxFrac, 0), 1 - fw),
+      fyT: Math.min(Math.max(d.fyT + dyFrac, 0), 1 - fh),
+    });
+  };
+  const onBoxPointerUp = () => {
+    dragRef.current = null;
+  };
+
+  /** 摆放框 → 引擎 -rect（PDF 点、左下原点）。 */
+  const rectArg = (() => {
+    if (!placement || !pageSize) return null;
+    const { w, h } = pageSize;
+    const fw = SIG_W_PT / w;
+    const fh = SIG_H_PT / h;
+    const fxL = Math.min(Math.max(placement.fxL, 0), 1 - fw);
+    const fyT = Math.min(Math.max(placement.fyT, 0), 1 - fh);
+    const llx = fxL * w;
+    const urx = (fxL + fw) * w;
+    const ury = (1 - fyT) * h;
+    const lly = (1 - fyT - fh) * h;
+    return [llx, lly, urx, ury].map((v) => v.toFixed(2)).join(",");
+  })();
 
   const loadCerts = async () => {
     try {
@@ -127,6 +264,9 @@ export default function SignPage({ lang, openRequest = 0, drop = null, onLicense
         visualSig,
         imagePath: sigImagePath,
         position: sigPosition,
+        rect: rectArg ?? undefined,
+        // 自由摆放时落页随摆放；四角模式维持旧行为（引擎默认第 1 页）。
+        page: rectArg ? previewPage : undefined,
       });
       setResult({ ok: true, msg: `${t("sign.success", lang)}\n${out}` });
     } catch (e) {
@@ -238,7 +378,7 @@ export default function SignPage({ lang, openRequest = 0, drop = null, onLicense
                   key={pos}
                   type="button"
                   className={`sig-position-btn${sigPosition === pos ? " active" : ""}`}
-                  onClick={() => setSigPosition(pos)}
+                  onClick={() => { setSigPosition(pos); setPlacement(null); }}
                 >
                   {t(`sign.position.${pos}`, lang)}
                 </button>
@@ -261,6 +401,73 @@ export default function SignPage({ lang, openRequest = 0, drop = null, onLicense
               )}
             </div>
             <p className="form-helper">{t("sigPosition.help", lang)}</p>
+          </div>
+        )}
+
+        {/* ── 签名摆放（D-53 v1）：真实页面预览 + 拖拽 + 落页 ── */}
+        {pdfPath && pageCount > 0 && pageSize && (
+          <div className="form-row form-row-visual">
+            <label>{t("sign.placement.title", lang)}</label>
+            <div className="sig-placement-toolbar">
+              <button
+                type="button"
+                className="btn-small"
+                onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                disabled={previewPage <= 1}
+              >
+                ‹
+              </button>
+              <span className="sig-placement-page">
+                {t("sign.placement.page", lang, { n: previewPage, total: pageCount })}
+              </span>
+              <button
+                type="button"
+                className="btn-small"
+                onClick={() => setPreviewPage((p) => Math.min(pageCount, p + 1))}
+                disabled={previewPage >= pageCount}
+              >
+                ›
+              </button>
+              <button type="button" className="btn-link" onClick={() => setPlacement(null)}>
+                {t("sign.placement.reset", lang)}
+              </button>
+            </div>
+            <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
+              <canvas
+                ref={canvasRef}
+                style={{
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                  border: "1px solid rgba(128,128,128,0.4)",
+                }}
+              />
+              {placement && (
+                <div
+                  onPointerDown={onBoxPointerDown}
+                  onPointerMove={onBoxPointerMove}
+                  onPointerUp={onBoxPointerUp}
+                  style={{
+                    position: "absolute",
+                    left: `${placement.fxL * 100}%`,
+                    top: `${placement.fyT * 100}%`,
+                    width: `${(SIG_W_PT / pageSize.w) * 100}%`,
+                    height: `${(SIG_H_PT / pageSize.h) * 100}%`,
+                    border: "2px dashed rgba(128,128,128,0.9)",
+                    background: "rgba(127,127,127,0.15)",
+                    cursor: "move",
+                    touchAction: "none",
+                    boxSizing: "border-box",
+                  }}
+                  aria-label={t("sign.placement.title", lang)}
+                />
+              )}
+            </div>
+            <p className="form-helper">
+              {placement
+                ? t("sign.placement.hint", lang)
+                : t("sign.placement.hintIdle", lang)}
+            </p>
           </div>
         )}
 

@@ -223,7 +223,7 @@ type parsedKey struct {
 }
 
 type parsedCerts struct {
-	leaf  *x509.Certificate // 与私钥配对的那张
+	leaf  *x509.Certificate   // 与私钥配对的那张
 	chain []*x509.Certificate // 其余（中间件等），保持输入顺序
 }
 
@@ -517,17 +517,23 @@ func cmdInspectCert() {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-key":
-			keyPath = args[i+1]; i++
+			keyPath = args[i+1]
+			i++
 		case "-cert":
-			certPath = args[i+1]; i++
+			certPath = args[i+1]
+			i++
 		case "-password":
-			password = args[i+1]; i++
+			password = args[i+1]
+			i++
 		case "-key-out":
-			keyOut = args[i+1]; i++
+			keyOut = args[i+1]
+			i++
 		case "-cert-out":
-			certOut = args[i+1]; i++
+			certOut = args[i+1]
+			i++
 		case "-json-out":
-			jsonOut = args[i+1]; i++
+			jsonOut = args[i+1]
+			i++
 		}
 	}
 	if keyPath == "" || keyOut == "" || certOut == "" || jsonOut == "" {
@@ -632,4 +638,3 @@ func writeInspectJSON(path string, meta certMeta, err error) {
 	data, _ := json.MarshalIndent(meta, "", "  ")
 	_ = os.WriteFile(path, data, 0600)
 }
-

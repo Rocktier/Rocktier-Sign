@@ -139,6 +139,26 @@ export const translations: Dict = {
     en: "Where to place the signature block on the page. Upload a custom stamp image below or use the default appearance.",
     zh: "选择签名块在页面上的位置。可上传自定义签章图片或使用默认外观。",
   },
+  "sign.placement.title": {
+    en: "Signature placement",
+    zh: "签名摆放",
+  },
+  "sign.placement.page": {
+    en: "Page {n} / {total}",
+    zh: "第 {n} / {total} 页",
+  },
+  "sign.placement.hint": {
+    en: "Drag the dashed box to adjust the signature position and page.",
+    zh: "拖动虚线框调整签名位置与落页。",
+  },
+  "sign.placement.hintIdle": {
+    en: "Pick a PDF to see the page preview.",
+    zh: "选择 PDF 后可预览页面。",
+  },
+  "sign.placement.reset": {
+    en: "Reset",
+    zh: "重置",
+  },
   "sign.uploadSig": {
     en: "Upload stamp (optional)",
     zh: "上传签章（可选）",

@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -17,6 +18,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/digitorus/pdfsign/sign"
@@ -55,6 +57,7 @@ func usage() {
 	fmt.Println("  verify         Verify a PDF signature")
 	fmt.Println("  generate-key   Generate a self-signed certificate + private key")
 	fmt.Println("  generate-sig-image  Generate a default signature appearance PNG")
+	fmt.Println("  sign 额外支持 -rect llx,lly,urx,ury（自由摆放，优先于 -position）")
 	fmt.Println("  inspect-cert    Inspect & normalize an imported certificate/key (PEM/DER/PFX)")
 	fmt.Println("")
 	fmt.Println("  sign -name <name> -input <input.pdf> -output <output.pdf> -key <private.key> -cert <cert.crt> [-image <sig.png>] [-position <top-left|top-right|bottom-left|bottom-right>] [-page <n>]")
@@ -155,7 +158,7 @@ func loadCertChain(path string) (*x509.Certificate, []*x509.Certificate, error) 
 }
 
 func cmdSign() {
-	var name, input, output, keyPath, certPath, imagePath, position string
+	var name, input, output, keyPath, certPath, imagePath, position, rectStr string
 	var page int
 
 	// Parse flags
@@ -163,21 +166,32 @@ func cmdSign() {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-name":
-			name = args[i+1]; i++
+			name = args[i+1]
+			i++
 		case "-input":
-			input = args[i+1]; i++
+			input = args[i+1]
+			i++
 		case "-output":
-			output = args[i+1]; i++
+			output = args[i+1]
+			i++
 		case "-key":
-			keyPath = args[i+1]; i++
+			keyPath = args[i+1]
+			i++
 		case "-cert":
-			certPath = args[i+1]; i++
+			certPath = args[i+1]
+			i++
 		case "-image":
-			imagePath = args[i+1]; i++
+			imagePath = args[i+1]
+			i++
 		case "-position":
-			position = args[i+1]; i++
+			position = args[i+1]
+			i++
+		case "-rect":
+			rectStr = args[i+1]
+			i++
 		case "-page":
-			fmt.Sscanf(args[i+1], "%d", &page); i++
+			fmt.Sscanf(args[i+1], "%d", &page)
+			i++
 		}
 	}
 
@@ -222,8 +236,38 @@ func cmdSign() {
 		signData.CertificateChains = [][]*x509.Certificate{append([]*x509.Certificate{cert}, extraCerts...)}
 	}
 
-	// If image path provided OR position explicitly requested, add visual appearance
-	if imagePath != "" {
+	// 签名落点（阶段 72/D-53 v1）：
+	//   -rect "llx,lly,urx,ury"  自由摆放（前端在真实页面预览上拖出来的绝对坐标，
+	//                            PDF 点、左下原点），优先于 -position；
+	//   -page <n>                落页（此前被解析后丢弃，等于永远第 1 页 —— 本版修复）；
+	//   -position <四角>         兼容旧路径。
+	// 无 image 时 Appearance.Visible=false：不可见签名仍占据该页的签名域。
+	if rectStr != "" {
+		llx, lly, urx, ury, err := parseRect(rectStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing -rect: %v\n", err)
+			os.Exit(2)
+		}
+		if page < 1 {
+			page = 1
+		}
+		signData.Appearance = sign.Appearance{
+			Visible:     imagePath != "",
+			Page:        uint32(page),
+			LowerLeftX:  llx,
+			LowerLeftY:  lly,
+			UpperRightX: urx,
+			UpperRightY: ury,
+		}
+		if imagePath != "" {
+			imageData, rerr := os.ReadFile(imagePath)
+			if rerr != nil {
+				fmt.Fprintf(os.Stderr, "Error reading image: %v\n", rerr)
+				os.Exit(2)
+			}
+			signData.Appearance.Image = imageData
+		}
+	} else if imagePath != "" {
 		imageData, err := os.ReadFile(imagePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading image: %v\n", err)
@@ -232,6 +276,7 @@ func cmdSign() {
 		llx, lly, urx, ury := positionToCoords(position, page, 0, 220.0, 72.0)
 		signData.Appearance = sign.Appearance{
 			Visible:     true,
+			Page:        uint32(page),
 			LowerLeftX:  llx,
 			LowerLeftY:  lly,
 			UpperRightX: urx,
@@ -249,6 +294,28 @@ func cmdSign() {
 	fmt.Printf("OK: signed %s -> %s\n", input, output)
 }
 
+// parseRect 解析 "llx,lly,urx,ury"（PDF 点、左下原点），并做基本秩序校验。
+// 页边界由调用方（前端按真实页面尺寸换算）保证；这里只挡明显错误。
+func parseRect(s string) (llx, lly, urx, ury float64, err error) {
+	var parts [4]float64
+	for i := 0; i < 4; i++ {
+		if _, err := fmt.Sscanf(s, "%f", &parts[i]); err != nil {
+			return 0, 0, 0, 0, fmt.Errorf("component %d: %w", i+1, err)
+		}
+		if i < 3 {
+			s = s[strings.IndexByte(s, ',')+1:]
+		}
+	}
+	llx, lly, urx, ury = parts[0], parts[1], parts[2], parts[3]
+	if llx >= urx || lly >= ury {
+		return 0, 0, 0, 0, errors.New("rect must satisfy llx < urx and lly < ury")
+	}
+	if llx < 0 || lly < 0 {
+		return 0, 0, 0, 0, errors.New("rect coordinates must be non-negative")
+	}
+	return llx, lly, urx, ury, nil
+}
+
 // positionToCoords converts a named position into PDF coordinates.
 // PDF origin is bottom-left. A4-ish page assumed (595×842 pt).
 // Signature rect defaults to 220×72 pt.
@@ -259,7 +326,7 @@ func positionToCoords(pos string, page, customPage int, w, h float64) (llx, lly,
 	if h == 0 {
 		h = 72
 	}
-	
+
 	margin := 40.0
 	pageWidth := 595.0
 	pageHeight := 842.0
@@ -302,9 +369,11 @@ func cmdGenerateSigImage() {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-name":
-			name = args[i+1]; i++
+			name = args[i+1]
+			i++
 		case "-output":
-			output = args[i+1]; i++
+			output = args[i+1]
+			i++
 		}
 	}
 
@@ -327,17 +396,17 @@ func generateSigImage(name, dateStr, outputPath string) error {
 
 	// Dark background with rounded-corner feel via border
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	
+
 	// Transparent background
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0, 0, 0, 0}}, image.Point{}, draw.Src)
-	
+
 	// Fill with subtle dark background
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			img.Set(x, y, color.RGBA{255, 255, 255, 255})
 		}
 	}
-	
+
 	// Border
 	borderColor := color.RGBA{0, 0, 0, 255}
 	for x := 0; x < width; x++ {
@@ -348,7 +417,7 @@ func generateSigImage(name, dateStr, outputPath string) error {
 		img.Set(0, y, borderColor)
 		img.Set(width-1, y, borderColor)
 	}
-	
+
 	// Inner light border (2px)
 	innerColor := color.RGBA{230, 230, 230, 255}
 	for x := 2; x < width-2; x++ {
@@ -362,15 +431,15 @@ func generateSigImage(name, dateStr, outputPath string) error {
 
 	// Add text: name (bold) + date (smaller)
 	face := basicfont.Face7x13
-	
+
 	// Name text (centered vertically, slightly above center)
 	nameY := height/2 - 8
 	addLabel(img, face, 10, nameY, name, color.RGBA{0, 0, 0, 255})
-	
+
 	// Date text
 	dateY := height/2 + 10
 	addLabel(img, face, 10, dateY, "Digitally signed: "+dateStr, color.RGBA{60, 60, 60, 255})
-	
+
 	// Right-side: red dot (brand mark)
 	redDot := color.RGBA{255, 74, 61, 255}
 	for dy := -6; dy <= 6; dy++ {
@@ -489,10 +558,10 @@ func cmdVerify() {
 	}
 
 	out := map[string]interface{}{
-		"verdict":  verdict,
+		"verdict":   verdict,
 		"exit_code": exitCode,
-		"summary":  summary,
-		"signers":  signers,
+		"summary":   summary,
+		"signers":   signers,
 	}
 	jsonData, _ := json.MarshalIndent(out, "", "  ")
 	fmt.Println(string(jsonData))
@@ -505,11 +574,14 @@ func cmdGenerateKey() {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-name":
-			name = args[i+1]; i++
+			name = args[i+1]
+			i++
 		case "-key-out":
-			keyOut = args[i+1]; i++
+			keyOut = args[i+1]
+			i++
 		case "-cert-out":
-			certOut = args[i+1]; i++
+			certOut = args[i+1]
+			i++
 		}
 	}
 

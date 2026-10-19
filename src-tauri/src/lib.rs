@@ -418,6 +418,19 @@ fn force_close(window: tauri::Window) {
     let _ = window.destroy();
 }
 
+/// 把输入 PDF 的原始字节交给前端（pdf.js 页面预览用）。
+///
+/// 走 tauri 二进制 IPC（ipc::Response），不经 JSON —— 大文件不膨胀。
+/// 路径来自系统文件对话框的用户选择；这里只做扩展名守卫。
+#[tauri::command]
+fn read_pdf_bytes(path: String) -> Result<tauri::ipc::Response, String> {
+    if !path.to_lowercase().ends_with(".pdf") {
+        return Err("only PDF files can be previewed".to_string());
+    }
+    let bytes = fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Sign a PDF file using the embedded sign-engine binary.
 /// Cert identified by cert_id (stored cert name) or direct key_path/cert_path.
 /// When visual_sig is true, generates a default signature appearance PNG and
@@ -435,6 +448,10 @@ fn sign_pdf(
     visual_sig: Option<bool>,
     image_path: Option<String>,
     position: Option<String>,
+    /// 自由摆放（D-53 v1）："llx,lly,urx,ury"（PDF 点，左下原点）。优先于 position。
+    rect: Option<String>,
+    /// 落页（1-based）。此前引擎虽解析 -page 但 Rust 从未传 —— 恒为第 1 页。
+    page: Option<u32>,
 ) -> Result<String, String> {
     // 签名是 Sign 唯一"产出新文件"的写操作：受授权闸门保护（FAMILY-LICENSE.md §2）。
     // ENFORCE=false 期间只记账不拦截；官网上架可购后翻 license::ENFORCE 即生效。
@@ -516,6 +533,17 @@ fn sign_pdf(
         .arg("-key").arg(&resolved_key)
         .arg("-cert").arg(&resolved_cert)
         .arg("-name").arg(&name);
+
+    // 自由摆放 + 落页（D-53 v1）：-rect 优先于 -position（引擎侧）；
+    // 不依赖 visual_sig —— 不可见签名同样占据所选页的签名域。
+    if let Some(r) = rect.as_deref() {
+        if !r.trim().is_empty() {
+            cmd.arg("-rect").arg(r);
+        }
+    }
+    if let Some(p) = page {
+        cmd.arg("-page").arg(p.to_string());
+    }
 
     // Add visual signature appearance if requested
     if visual_sig == Some(true) {
@@ -1122,6 +1150,7 @@ pub fn run() {
             sign_pdf,
             verify_pdf,
             generate_key,
+            read_pdf_bytes,
             list_certs,
             inspect_cert_files,
             import_cert,
