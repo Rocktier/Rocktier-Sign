@@ -448,9 +448,9 @@ fn sign_pdf(
     visual_sig: Option<bool>,
     image_path: Option<String>,
     position: Option<String>,
-    /// 自由摆放（D-53 v1）："llx,lly,urx,ury"（PDF 点，左下原点）。优先于 position。
+    // 自由摆放（D-53 v1）："llx,lly,urx,ury"（PDF 点，左下原点）。优先于 position。
     rect: Option<String>,
-    /// 落页（1-based）。此前引擎虽解析 -page 但 Rust 从未传 —— 恒为第 1 页。
+    // 落页（1-based）。此前引擎虽解析 -page 但 Rust 从未传 —— 恒为第 1 页。
     page: Option<u32>,
 ) -> Result<String, String> {
     // 签名是 Sign 唯一"产出新文件"的写操作：受授权闸门保护（FAMILY-LICENSE.md §2）。
