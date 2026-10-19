@@ -167,6 +167,9 @@ function App() {
     setLicenseOpen(true);
     refreshLicense();
   }, [refreshLicense]);
+  /* B1：吊销复检判定 revoked 时置位，激活框顶部显示「许可已被吊销」专属通告 ——
+     回执已清、info 与试用到期无从区分，verdict 是唯一可靠的传递点。 */
+  const [licenseRevoked, setLicenseRevoked] = useState(false);
 
   /* 检查更新。**只有这里会触发联网检查** —— 左下角按钮与帮助菜单共用。
      用 ref 而非 state 判重：连点两次不该发出两个请求。 */
@@ -184,6 +187,7 @@ function App() {
          授权状态回到未激活并弹激活对话框（openLicense 内含 refreshLicense）。 */
       const verdict = await revalidateLicence();
       if (verdict === "revoked") {
+        setLicenseRevoked(true);
         refreshLicense();
         openLicense();
       }
@@ -427,7 +431,13 @@ function App() {
       )}
 
       {licenseOpen && (
-        <LicenseDialog lang={lang} info={license} onRefresh={refreshLicense} onClose={() => setLicenseOpen(false)} />
+        <LicenseDialog
+          lang={lang}
+          info={license}
+          revoked={licenseRevoked}
+          onRefresh={refreshLicense}
+          onClose={() => { setLicenseOpen(false); setLicenseRevoked(false); }}
+        />
       )}
     </div>
   );

@@ -410,6 +410,10 @@ export const translations: Dict = {
     en: "Your trial has ended. Verifying PDFs and managing certificates still work; signing needs a license.",
     zh: "试用已结束。验证 PDF 与管理证书仍可用；签名需要许可。",
   },
+  "license.revokedNotice": {
+    en: "This licence has been revoked — usually after a refund or a payment dispute. Your licence status has been reset. Activate again below to continue, or write to hello@rocktier.com (with your order number) if you believe this is a mistake.",
+    zh: "该许可已被吊销 —— 通常是退款或支付争议导致。授权状态已重置。在下方重新激活即可继续使用；若你认为这是误判，请把订单号发到 hello@rocktier.com。",
+  },
   "license.licensed": {
     en: "Licensed. Thank you.",
     zh: "已激活。谢谢。",
