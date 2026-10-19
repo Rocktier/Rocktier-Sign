@@ -286,13 +286,39 @@ fn make_inspect_tmp() -> Result<PathBuf, String> {
     Ok(tmp)
 }
 
-/// engine inspect-cert 的三种失败形态（退出码 7 / 6 / 其它）。
+/// engine inspect-cert 的三种失败形态（退出码 7 / 8 / 6 / 其它）。
 enum InspectFail {
     /// 输入是加密私钥但没给口令 → 前端弹密码框（CERT_IMPORT_PASSWORD_REQUIRED）。
     PasswordRequired,
+    /// 给过口令但解不开（打错了）→ 前端提示口令不正确并保留密码框（S2）。
+    PasswordWrong,
     /// 私钥与证书不配对 → 前端展示固定说明（CERT_KEY_MISMATCH）。
     KeyMismatch,
     Other(String),
+}
+
+/// 跑引擎子进程；口令（若有）经 stdin 写入后关闭，再收输出。
+/// 写入口令的量只有几十字节，子进程输出也只有一行，无管道死锁风险。
+fn run_engine_with_password(
+    mut cmd: Command,
+    password: Option<&str>,
+) -> Result<std::process::Output, String> {
+    if let Some(pw) = password {
+        if !pw.is_empty() {
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| format!("engine exec: {e}"))?;
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write as _;
+                let _ = stdin.write_all(pw.as_bytes());
+                // drop 即关闭 stdin —— 引擎读到 EOF 才会继续。
+            }
+            return child
+                .wait_with_output()
+                .map_err(|e| format!("engine wait: {e}"));
+        }
+    }
+    cmd.output().map_err(|e| format!("engine exec: {e}"))
 }
 
 fn engine_inspect(
@@ -315,15 +341,19 @@ fn engine_inspect(
     if let Some(c) = cert_in {
         cmd.arg("-cert").arg(c);
     }
+    // 口令走 stdin（S1）：命令行参数在 ps 里可见，窗口期内可被同机进程窥视。
+    // stdin 写入量极小（一行口令），不存在管道死锁风险。
     if let Some(pw) = password {
         if !pw.is_empty() {
-            cmd.arg("-password").arg(pw);
+            cmd.arg("-password-stdin");
+            cmd.stdin(std::process::Stdio::piped());
         }
     }
-    let out = cmd.output().map_err(|e| InspectFail::Other(format!("engine exec: {e}")))?;
+    let out = run_engine_with_password(cmd, password).map_err(InspectFail::Other)?;
     match out.status.code() {
         Some(0) => {}
         Some(7) => return Err(InspectFail::PasswordRequired),
+        Some(8) => return Err(InspectFail::PasswordWrong),
         Some(6) => return Err(InspectFail::KeyMismatch),
         _ => return Err(InspectFail::Other(String::from_utf8_lossy(&out.stderr).to_string())),
     }
@@ -750,6 +780,7 @@ fn inspect_cert_files(
 fn inspect_fail_to_err(f: InspectFail) -> String {
     match f {
         InspectFail::PasswordRequired => "CERT_IMPORT_PASSWORD_REQUIRED".to_string(),
+        InspectFail::PasswordWrong => "CERT_IMPORT_PASSWORD_WRONG".to_string(),
         InspectFail::KeyMismatch => {
             "CERT_KEY_MISMATCH: the private key does not match this certificate".to_string()
         }

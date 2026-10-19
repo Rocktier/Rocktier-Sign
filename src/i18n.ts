@@ -341,6 +341,10 @@ export const translations: Dict = {
     en: "This file is encrypted. Enter the passphrase and inspect again.",
     zh: "该文件已加密，请输入口令后重新检查。",
   },
+  "cert.import.passwordWrong": {
+    en: "Incorrect passphrase. Check it and try again.",
+    zh: "口令不正确，请检查后重试。",
+  },
   "cert.import.keyMismatch": {
     en: "The private key does not match this certificate — check the selected files.",
     zh: "私钥与证书不配对——请检查是否选错了文件。",

@@ -69,7 +69,13 @@ export default function CertPage({ lang }: Props) {
       if (!newName.trim()) setNewName(meta.cn);
     } catch (e) {
       const raw = String(e);
-      if (raw.includes("CERT_IMPORT_PASSWORD_REQUIRED")) {
+      if (raw.includes("CERT_IMPORT_PASSWORD_WRONG")) {
+        // 口令打错：保留密码框与已输内容，明确说「口令不正确」——
+        // 早期版本把口令错也报成「需要口令」，用户无限重弹且不知所以（S2）。
+        setShowPw(true);
+        setPreview(null);
+        setError(t("cert.import.passwordWrong", lang));
+      } else if (raw.includes("CERT_IMPORT_PASSWORD_REQUIRED")) {
         setShowPw(true);
         setPreview(null);
         setError(t("cert.import.passwordRequired", lang));

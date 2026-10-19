@@ -12,7 +12,9 @@ package main
 //   - 本命令不做任何网络与持久化，只在给定路径写文件。
 //
 // 退出码：0 成功；2 参数/解析失败；6 私钥与证书不匹配；7 缺口令（ encrypted 输入
-// 而未给 -password —— Rust 据此让前端弹出密码框）。
+// 而未给 -password 或 -password-stdin —— Rust 据此让前端弹出密码框）；
+// 8 口令错误（给了口令但解不开 —— Rust 据此让前端显示「口令不正确」并保留密码框，
+// 而不是把它误报成「需要口令」让用户无限重弹）。
 //
 // 口令加密 PKCS#8（PBES2）Go 标准库不认，这里按 RFC 8018 手解：
 // PBKDF2（HMAC-SHA1/224/256/384/512）+ AES-128/192/256-CBC 或 3DES-CBC。
@@ -39,7 +41,9 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -81,6 +85,13 @@ var (
 
 // errPasswordRequired 由 inspect 路径统一翻译为退出码 7。
 var errPasswordRequired = errors.New("PASSWORD_REQUIRED")
+
+// errPasswordWrong 由 inspect 路径统一翻译为退出码 8（S2：口令给了但解不开，
+// 必须与「没给口令」区分 —— 否则前端把口令打错也当成「需要口令」无限重弹）。
+var errPasswordWrong = errors.New("PASSWORD_WRONG")
+
+// errInvalidPadding：PBES2 解密后填充非法 —— 实践中几乎必为口令错误。
+var errInvalidPadding = errors.New("invalid padding (wrong password?)")
 
 // decryptPKCS8Encrypted 解「ENCRYPTED PRIVATE KEY」（PBES2 为主，兼容 PBES1 家族里
 // 常见的 pbeWithMD5AndDES 等不做 —— 现实中 PKCS#8 加密几乎都是 PBES2；legacy PEM
@@ -198,17 +209,18 @@ func cbcDecryptStrip(b cipher.Block, iv, data []byte) ([]byte, error) {
 }
 
 // pkcs7Strip 去除 PKCS#7 填充；填充满块（整块 padding）也按标准剥掉。
+// 填充非法时返回 errInvalidPadding 哨兵（由调用方判「口令错误」）。
 func pkcs7Strip(data []byte, blockSize int) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty plaintext")
 	}
 	pad := int(data[len(data)-1])
 	if pad <= 0 || pad > blockSize || pad > len(data) {
-		return nil, errors.New("invalid padding (wrong password?)")
+		return nil, errInvalidPadding
 	}
 	for _, c := range data[len(data)-pad:] {
 		if int(c) != pad {
-			return nil, errors.New("invalid padding (wrong password?)")
+			return nil, errInvalidPadding
 		}
 	}
 	return data[:len(data)-pad], nil
@@ -242,6 +254,14 @@ func parseKeyFile(path, password string) (*parsedKey, []*x509.Certificate, error
 	if priv, certs, err := decodePFX(data, password); err == nil {
 		pk := &parsedKey{signer: priv}
 		return pk, certs, nil
+	} else if errors.Is(err, pkcs12mod.ErrIncorrectPassword) {
+		// PFX 结构成立（MAC 校验失败说明它就是 PFX）只是口令问题：
+		// 没给口令 → 「需要口令」（前端弹框）；给过口令 → 「口令错误」。
+		// 都不能报「无法识别格式」—— 那会让用户以为文件坏了（S2）。
+		if password == "" {
+			return nil, nil, errPasswordRequired
+		}
+		return nil, nil, errPasswordWrong
 	}
 	pk, err := parseKeyDER(data)
 	if err != nil {
@@ -276,10 +296,11 @@ func decodePFX(data []byte, password string) (crypto.Signer, []*x509.Certificate
 
 func parseKeyPEM(data []byte, password string) (*parsedKey, []*x509.Certificate, error) {
 	var (
-		certs   []*x509.Certificate
-		pk      *parsedKey
-		needPw  bool
-		lastErr error
+		certs    []*x509.Certificate
+		pk       *parsedKey
+		needPw   bool
+		wrongPw  bool
+		lastErr  error
 	)
 	rest := data
 	for {
@@ -303,7 +324,12 @@ func parseKeyPEM(data []byte, password string) (*parsedKey, []*x509.Certificate,
 			if isLegacyEncrypted(block) {
 				der, err := x509.DecryptPEMBlock(block, []byte(password))
 				if err != nil {
-					needPw = true
+					// 口令错（且用户确实给过口令）→ exit 8；否则按「需要口令」。
+					if password != "" && errors.Is(err, x509.IncorrectPasswordError) {
+						needPw, wrongPw = true, true
+					} else {
+						needPw = true
+					}
 					lastErr = err
 					break
 				}
@@ -319,7 +345,12 @@ func parseKeyPEM(data []byte, password string) (*parsedKey, []*x509.Certificate,
 			if isLegacyEncrypted(block) {
 				der, err := x509.DecryptPEMBlock(block, []byte(password))
 				if err != nil {
-					needPw = true
+					// 口令错（且用户确实给过口令）→ exit 8；否则按「需要口令」。
+					if password != "" && errors.Is(err, x509.IncorrectPasswordError) {
+						needPw, wrongPw = true, true
+					} else {
+						needPw = true
+					}
 					lastErr = err
 					break
 				}
@@ -338,8 +369,12 @@ func parseKeyPEM(data []byte, password string) (*parsedKey, []*x509.Certificate,
 			}
 			der, err := decryptPKCS8Encrypted(block.Bytes, []byte(password))
 			if err != nil {
-				needPw = true
-				lastErr = err
+				// 填充非法 = 口令错（exit 8）；算法/结构不支持 = 格式错（exit 2）。
+				if errors.Is(err, errInvalidPadding) {
+					needPw, wrongPw = true, true
+				} else {
+					lastErr = err
+				}
 				break
 			}
 			if k, err := parseKeyDER(der); err == nil {
@@ -351,6 +386,9 @@ func parseKeyPEM(data []byte, password string) (*parsedKey, []*x509.Certificate,
 	}
 	if pk == nil {
 		if needPw {
+			if wrongPw {
+				return nil, nil, errPasswordWrong
+			}
 			return nil, nil, errPasswordRequired
 		}
 		if lastErr != nil {
@@ -513,6 +551,7 @@ func cnOf(name pkix.Name) string {
 
 func cmdInspectCert() {
 	var keyPath, certPath, password, keyOut, certOut, jsonOut string
+	var passwordStdin bool
 	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -525,6 +564,8 @@ func cmdInspectCert() {
 		case "-password":
 			password = args[i+1]
 			i++
+		case "-password-stdin":
+			passwordStdin = true
 		case "-key-out":
 			keyOut = args[i+1]
 			i++
@@ -536,6 +577,15 @@ func cmdInspectCert() {
 			i++
 		}
 	}
+	if passwordStdin {
+		// 口令走 stdin（S1）：命令行参数在 ps 里可见，窗口期内可被同机进程窥视。
+		raw, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading password from stdin: %v\n", err)
+			os.Exit(2)
+		}
+		password = strings.TrimRight(string(raw), "\r\n")
+	}
 	if keyPath == "" || keyOut == "" || certOut == "" || jsonOut == "" {
 		fmt.Fprintln(os.Stderr, "Error: -key, -key-out, -cert-out, -json-out are required")
 		usage()
@@ -546,6 +596,10 @@ func cmdInspectCert() {
 		if errors.Is(err, errPasswordRequired) {
 			writeInspectJSON(jsonOut, certMeta{}, err) // 带标记输出，见 writeInspectJSON
 			os.Exit(7)
+		}
+		if errors.Is(err, errPasswordWrong) {
+			writeInspectJSON(jsonOut, certMeta{}, err)
+			os.Exit(8)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
@@ -627,13 +681,21 @@ func cmdInspectCert() {
 	fmt.Printf("OK: inspected certificate for %q (chain=%d, expired=%v)\n", meta.CN, meta.ChainLen, meta.Expired)
 }
 
-// writeInspectJSON：成功/不匹配/缺口令三种出口共用的 JSON 落盘。
-// 缺口令时写入 {"password_required":true}（其余字段为零值），Rust 据此让前端弹密码框。
+// writeInspectJSON：成功/不匹配/口令问题三种出口共用的 JSON 落盘。
+// 缺口令时写入 {"password_required":true}、口令错误时 {"password_wrong":true}
+// （其余字段为零值）—— Rust/前端据此区分「弹密码框」与「提示口令不正确」。
 func writeInspectJSON(path string, meta certMeta, err error) {
-	if err != nil && errors.Is(err, errPasswordRequired) {
-		data, _ := json.MarshalIndent(map[string]interface{}{"password_required": true}, "", "  ")
-		_ = os.WriteFile(path, data, 0600)
-		return
+	if err != nil {
+		if errors.Is(err, errPasswordRequired) {
+			data, _ := json.MarshalIndent(map[string]interface{}{"password_required": true}, "", "  ")
+			_ = os.WriteFile(path, data, 0600)
+			return
+		}
+		if errors.Is(err, errPasswordWrong) {
+			data, _ := json.MarshalIndent(map[string]interface{}{"password_wrong": true}, "", "  ")
+			_ = os.WriteFile(path, data, 0600)
+			return
+		}
 	}
 	data, _ := json.MarshalIndent(meta, "", "  ")
 	_ = os.WriteFile(path, data, 0600)

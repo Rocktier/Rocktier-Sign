@@ -21,6 +21,8 @@ const EXACT: Record<string, string> = {
   "Invalid certificate name": "cert.errorNameTaken",
   // import_cert：加密输入但没给口令（前端据此弹出密码框）。
   "CERT_IMPORT_PASSWORD_REQUIRED": "cert.import.passwordRequired",
+  // import_cert：给过口令但解不开（前端提示口令不正确，保留密码框 —— S2）。
+  "CERT_IMPORT_PASSWORD_WRONG": "cert.import.passwordWrong",
   "CERT_KEY_MISMATCH: the private key does not match this certificate": "cert.import.keyMismatch",
 };
 
