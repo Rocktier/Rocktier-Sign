@@ -522,6 +522,18 @@ export const translations: Dict = {
     en: "Checking sends one request to GitHub for the latest version number. It carries no license code and nothing about your files.",
     zh: "检查会向 GitHub 发一次请求获取最新版本号。请求不含许可证码，也不含与你的文件有关的任何信息。",
   },
+  "update.close": {
+    en: "Close",
+    zh: "关闭",
+  },
+  "update.openReleases": {
+    en: "Open releases",
+    zh: "打开发布页",
+  },
+  "update.openReleasesHint": {
+    en: "You can also open the releases page directly.",
+    zh: "也可以直接打开发布页查看。",
+  },
 };
 
 

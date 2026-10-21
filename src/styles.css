@@ -252,82 +252,6 @@ button {
   box-sizing: border-box;
 }
 
-/* ── 更新检查（侧栏底部）────────────────────────────────────────────
-   常驻可见，但刻意安静：比正文小一档、三级文字色，只有悬停才亮起来。
-   有可用更新时才转成 accent —— 用户没要求被提醒，就不该用红色徽标催他。 */
-.update-line {
-  flex: 1 1 100%;
-  min-height: 24px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  font-family: var(--font);
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.update-line:hover:not(:disabled) {
-  color: var(--text-secondary);
-}
-
-.update-line:disabled {
-  cursor: default;
-}
-
-.update-ver {
-  font-variant-numeric: tabular-nums;
-}
-
-.update-sep {
-  opacity: 0.45;
-}
-
-.update-action {
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  transition: text-decoration-color 0.15s ease;
-}
-
-.update-line:hover:not(:disabled) .update-action,
-.update-line.has-update .update-action {
-  text-decoration-color: currentColor;
-}
-
-.update-line.has-update {
-  color: var(--accent);
-}
-
-/* 结果行。占位高度固定，避免检查前后侧栏抖动。 */
-.update-note {
-  flex: 1 1 100%;
-  margin-top: 3px;
-  min-height: 16px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-tertiary);
-}
-
-.update-get {
-  padding: 3px 10px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--font);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.update-get:hover {
-  filter: brightness(1.08);
-}
-
 .lang-switch {
   display: flex;
   gap: 4px;
@@ -1090,4 +1014,94 @@ button {
 .icon-btn[data-mode="auto"]::before {
   background: transparent;
   border: 1px solid var(--text-tertiary, var(--text-muted, #888));
+}
+
+/* ── 检查更新对话框（入口：帮助菜单「检查更新…」）────────────────────
+   点击才联网：启动时、工作中、后台都不检查，见 services/updates.ts 头注。
+   侧栏底部常驻入口已移除（用户要求入口全部收进菜单；右下角悬浮入口
+   实测还会盖住底部内容，Compressor v0.1.10），故统一为菜单 + 本对话框。 */
+.update-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.update-dialog {
+  width: min(440px, calc(100vw - 48px));
+  max-height: min(80vh, 560px);
+  overflow-y: auto;
+  background: var(--surface, var(--bg));
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 16px 48px var(--page-shadow, rgba(0, 0, 0, 0.5));
+  padding: 16px 18px;
+  font-size: 13px;
+  color: var(--text, var(--text-secondary, inherit));
+}
+
+.update-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.update-header h3 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text, var(--text-primary));
+  font-weight: 600;
+}
+
+.update-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.update-close:hover { color: var(--text, var(--text-primary)); }
+
+.update-body p { margin: 0 0 10px; }
+
+.update-body small { color: var(--text-muted); line-height: 1.5; }
+
+.update-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+}
+
+.update-footer-spacer { flex: 1; }
+
+.update-footer button {
+  padding: 6px 14px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text, var(--text-primary));
+  background: var(--surface-2, transparent);
+  cursor: pointer;
+}
+.update-footer button:hover { border-color: var(--accent); }
+
+/* 「获取 v…」主按钮：有新版时唯一需要用户点的动作，用 accent 让它显眼。 */
+.update-footer button.update-get-btn {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--on-accent, #fff);
+  font-weight: 600;
 }

@@ -6,8 +6,9 @@ import { LOCALES, buildMenu, t, type Lang } from "./i18n";
 import { SignPenIcon, CheckIcon, KeyIcon, SunIcon, MoonIcon } from "./components/Icons";
 import { SignBadge } from "./components/Icons";
 import { LicenseDialog } from "./components/LicenseDialog";
+import { UpdateDialog } from "./components/UpdateDialog";
 import { licenseStatus, onLicenseExpired, revalidateLicence, type LicenseInfo } from "./services/license";
-import { checkForUpdates, currentVersion, type UpdateResult } from "./services/updates";
+import { checkForUpdates, currentVersion, type UpdateResult, type UpdateState } from "./services/updates";
 import { routeDrop, type DropRequest } from "./services/dropFiles";
 import SignPage from "./pages/SignPage";
 import VerifyPage from "./pages/VerifyPage";
@@ -28,12 +29,8 @@ type Resolved = "light" | "dark";
 const THEME_KEY = "rocktier.sign.theme";
 const THEME_CYCLE: readonly ThemeMode[] = ["auto", "light", "dark"];
 const LANG_KEY = "rocktier.sign.lang";
-const UPDATE_CHECKED_KEY = "rocktier.sign.updateCheckedAt";
-
 /** 打包时写死，与 tag 同源。 */
 const VERSION = currentVersion();
-
-type UpdateState = "idle" | "checking" | "uptodate" | "available" | "failed";
 
 function App() {
   const [lang, setLang] = useState<Lang>(() => {
@@ -62,11 +59,9 @@ function App() {
      这是「除非你要求，应用不会联网」这条承诺的落点。 */
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
-  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(() => {
-    const raw = localStorage.getItem(UPDATE_CHECKED_KEY);
-    const n = raw ? Number(raw) : 0;
-    return n > 0 ? n : null;
-  });
+  /* 结果框的开合。只由菜单「检查更新…」打开 —— 侧栏底部常驻入口已移除
+     （用户要求入口全部收进菜单；右下角悬浮入口实测还会盖住底部内容）。 */
+  const [updateOpen, setUpdateOpen] = useState(false);
   const updateChecking = useRef(false);
 
   useEffect(() => {
@@ -180,8 +175,6 @@ function App() {
     try {
       const result = await checkForUpdates();
       setUpdateResult(result);
-      setLastCheckedAt(result.checkedAt);
-      try { localStorage.setItem(UPDATE_CHECKED_KEY, String(result.checkedAt)); } catch {}
       setUpdateState(result.hasUpdate ? "available" : "uptodate");
       /* 顺带吊销复检：同一次点击、同一承诺（只在点击时联网）。revoked → 清回执，
          授权状态回到未激活并弹激活对话框（openLicense 内含 refreshLicense）。 */
@@ -240,6 +233,7 @@ function App() {
           void invoke("open_url", { url: "mailto:hello@rocktier.com" }).catch(() => {});
           break;
         case "check-updates":
+          setUpdateOpen(true);
           void runUpdateCheck();
           break;
         default:
@@ -337,40 +331,6 @@ function App() {
                 : t("license.trialChip", lang, { days: license.daysLeft })}
             </button>
           )}
-          {/* 版本号 + 检查更新（家族更新入口）。
-              版本号本身做成入口而不是藏进菜单：侧栏底部常驻，看得见才会被点。
-              点击才联网 —— 启动时、工作中、后台都不检查，见 services/updates.ts 头注。 */}
-          <button
-            type="button"
-            className={`update-line${updateState === "available" ? " has-update" : ""}`}
-            onClick={() => void runUpdateCheck()}
-            disabled={updateState === "checking"}
-            title={t("update.privacyNote", lang)}
-          >
-            <span className="update-ver">v{VERSION}</span>
-            <span className="update-sep" aria-hidden="true">·</span>
-            <span className="update-action">
-              {updateState === "checking" ? t("update.checking", lang) : t("update.check", lang)}
-            </span>
-          </button>
-          <div className="update-note" role="status" aria-live="polite">
-            {updateState === "uptodate" && t("update.upToDate", lang)}
-            {updateState === "failed" && t("update.failed", lang)}
-            {updateState === "available" && updateResult && (
-              <button
-                type="button"
-                className="update-get"
-                onClick={() => void invoke("open_url", { url: updateResult.url }).catch(() => {})}
-                title={t("update.available", lang, { v: updateResult.latest })}
-              >
-                {t("update.download", lang, { v: updateResult.latest })}
-              </button>
-            )}
-            {updateState === "idle" &&
-              t("update.lastChecked", lang, {
-                d: lastCheckedAt ? formatCheckedAt(lastCheckedAt, lang) : t("update.never", lang),
-              })}
-          </div>
           {/* 家族唯一主题按钮：.icon-btn（28×28 + 40×40 命中区）。
               三态 auto → light → dark，data-mode 驱动角标，title/aria-label 说明当前档。 */}
           <button
@@ -430,6 +390,17 @@ function App() {
         </div>
       )}
 
+      {/* 更新检查：入口在帮助菜单「检查更新…」，结果弹 UpdateDialog。
+          侧栏底部常驻入口已移除（用户要求入口全部收进菜单）。 */}
+      {updateOpen && (
+        <UpdateDialog
+          state={updateState}
+          result={updateResult}
+          currentVersion={VERSION}
+          lang={lang}
+          onClose={() => setUpdateOpen(false)}
+        />
+      )}
       {licenseOpen && (
         <LicenseDialog
           lang={lang}
@@ -464,16 +435,4 @@ function systemTheme(): Resolved {
 /** auto 落成实际生效值 —— data-theme 只接受 light/dark。 */
 function resolveTheme(mode: ThemeMode): Resolved {
   return mode === "auto" ? systemTheme() : mode;
-}
-
-/**
- * 「上次检查」的时间戳格式化。跟随应用语言而非系统语言：
- * 界面是中文就显示中文日期，避免中英混排。
- */
-function formatCheckedAt(ts: number, lang: Lang): string {
-  try {
-    return new Date(ts).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US");
-  } catch {
-    return new Date(ts).toISOString().slice(0, 10);
-  }
 }
