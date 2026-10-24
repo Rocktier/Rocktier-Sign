@@ -86,12 +86,21 @@ jobs:
       - name: Build DMG
         run: npm run tauri build
 
+      # 架构校验必须从 **dmg** 里取，不能从 bundle/macos 目录取：
+      # tauri.conf.json 的 bundle.targets 是 ['dmg','msi','nsis']，不含 'app'，
+      # 于是 Tauri 把 .app 当中间产物 —— dmg 打完立刻 Cleaning 掉它
+      # （v0.1.14 两腿都栽在这：日志有 "Cleaning ... Rocktier Sign.app"，
+      # 随后 find 不到 .app 直接 exit 1）。挂载 dmg 校验还有一层好处：
+      # 验的是用户真正下载的那个包里的二进制，而不是被清理前的中间态。
       - name: Verify bundle architecture
         run: |
           set -euo pipefail
-          APP=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)
-          [ -z "$APP" ] && { echo "::error::.app not found"; exit 1; }
-          file "$APP/Contents/MacOS/"* | tee /dev/stderr | grep -q '${{ matrix.filearch }}'
+          DMG=$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' | head -1)
+          [ -z "$DMG" ] && { echo "::error::.dmg not found"; exit 1; }
+          MNT=$(mktemp -d)
+          hdiutil attach "$DMG" -mountpoint "$MNT" -nobrowse -quiet
+          trap 'hdiutil detach "$MNT" -quiet || true' EXIT
+          file "$MNT"/*.app/Contents/MacOS/* | tee /dev/stderr | grep -q '${{ matrix.filearch }}'
           file src-tauri/sign-engine-macos | grep -q '${{ matrix.filearch }}'
       - name: Ensure Release Exists
         run: |
